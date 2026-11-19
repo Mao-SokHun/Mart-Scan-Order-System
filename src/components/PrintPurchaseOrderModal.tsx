@@ -20,14 +20,17 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
 
   if (!isOpen) return null;
 
-  const suppliers = Array.from(new Set(items.map(i => i.product.supplierName)));
+  const orderableItems = items.filter(i => i.orderQuantity > 0);
+  const displayItems = orderableItems.length > 0 ? orderableItems : items;
+
+  const suppliers = Array.from(new Set(displayItems.map(i => i.product.supplierName)));
 
   const filteredItems = selectedSupplier === 'all'
-    ? items
-    : items.filter(i => i.product.supplierName === selectedSupplier);
+    ? displayItems
+    : displayItems.filter(i => i.product.supplierName === selectedSupplier);
 
-  const totalCost = filteredItems.reduce((acc, curr) => acc + curr.totalCost, 0);
-  const totalQty = filteredItems.reduce((acc, curr) => acc + curr.orderQuantity, 0);
+  const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
+  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   const poNumber = `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
 
   const handlePrint = () => {
@@ -137,8 +140,8 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
                   </td>
                   <td className="py-2 px-3 text-center text-slate-600">{item.product.unit}</td>
                   <td className="py-2 px-3 text-center font-bold text-blue-700">{item.orderQuantity}</td>
-                  <td className="py-2 px-3 text-right">${item.unitCost.toFixed(2)}</td>
-                  <td className="py-2 px-3 text-right font-bold text-slate-800">${item.totalCost.toFixed(2)}</td>
+                  <td className="py-2 px-3 text-right">${(item.unitCost || 0).toFixed(2)}</td>
+                  <td className="py-2 px-3 text-right font-bold text-slate-800">${(item.totalCost || 0).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -147,7 +150,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
                 <td colSpan={4} className="py-3 px-3 text-right text-xs">សរុបរួម:</td>
                 <td className="py-3 px-3 text-center text-blue-700 text-xs">{totalQty}</td>
                 <td></td>
-                <td className="py-3 px-3 text-right text-emerald-700 text-sm">${totalCost.toFixed(2)}</td>
+                <td className="py-3 px-3 text-right text-emerald-700 text-sm">${(totalCost || 0).toFixed(2)}</td>
               </tr>
             </tfoot>
           </table>

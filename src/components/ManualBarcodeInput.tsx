@@ -62,10 +62,12 @@ export const ManualBarcodeInput: React.FC<ManualBarcodeInputProps> = ({
             ref={inputRef}
             data-barcode-input="true"
             type="text"
-            inputMode="numeric"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck="false"
             value={barcodeInput}
             onChange={(e) => setBarcodeInput(e.target.value)}
-            placeholder="បាញ់កាំភ្លើង ឬវាយ Barcode (ឧ. 8851959132014)..."
+            placeholder="បាញ់កាំភ្លើង ឬវាយ Barcode (ឧ. P0904040002, 8851959...)..."
             className="w-full pl-10 pr-12 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition font-mono tracking-wider text-slate-800 placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-400"
           />
           {barcodeInput && (

@@ -191,7 +191,7 @@ export const App: React.FC = () => {
   // Global listener for USB/Bluetooth Barcode Scanner Guns
   useBarcodeGun({
     onScan: handleScan,
-    enabled: true
+    enabled: !isAddProductOpen && !isPrintPOOpen
   });
 
   // Quantity updater
@@ -457,10 +457,10 @@ export const App: React.FC = () => {
       <div className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-2.5 flex items-center justify-between z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
         <div className="min-w-0 pr-2">
           <span className="text-[10px] text-slate-500 block font-medium truncate">
-            សរុប {restockItems.length} មុខ • {restockItems.reduce((a, c) => a + c.orderQuantity, 0)} ឯកតា
+            សរុប {restockItems.length} មុខ • {restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} ឯកតា
           </span>
           <span className="text-sm font-extrabold text-emerald-600">
-            ${restockItems.reduce((a, c) => a + c.totalCost, 0).toFixed(2)}
+            ${(restockItems.reduce((a, c) => a + (c.totalCost || 0), 0) || 0).toFixed(2)}
           </span>
         </div>
 
