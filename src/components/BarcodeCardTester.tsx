@@ -95,13 +95,13 @@ export const BarcodeCardTester: React.FC<BarcodeCardTesterProps> = ({
                 <span className="text-[10px] text-slate-400 truncate font-medium">
                   {prod.unit}
                 </span>
-                {prod.currentStock <= 0 ? (
+                {(prod.currentStock ?? 0) <= 0 ? (
                   <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.2 rounded font-bold">
                     អស់ស្តុក
                   </span>
                 ) : (
                   <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded">
-                    សល់ {prod.currentStock}
+                    សល់ {prod.currentStock ?? 0}
                   </span>
                 )}
               </div>

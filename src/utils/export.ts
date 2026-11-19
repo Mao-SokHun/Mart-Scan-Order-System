@@ -213,11 +213,11 @@ export const exportDailyPlanExcel = (
   ];
   XLSX.utils.book_append_sheet(workbook, wsSummary, 'បញ្ជីទិញសរុប (PO Summary)');
 
-  // 2. ADD DEPARTMENT SHEETS matching Store Daily Plan structure
+  // 2. ADD DEPARTMENT SHEETS matching Store Daily Plan structure (always include all 4 tabs)
   const sheetOrder = ['Daily', 'Bakery and Cake', 'Fresh', ' Milk and Yogurt'];
   for (const sheetName of sheetOrder) {
-    const rows = sheetsData[sheetName];
-    if (rows && rows.length > 0) {
+    const rows = sheetsData[sheetName] || [];
+    if (rows.length > 0) {
       // Add sheet subtotal row
       const sheetQty = rows.reduce((acc, r) => acc + (parseInt(r['ចំនួនត្រូវទិញ (Order Qty)'], 10) || 0), 0);
       const sheetCost = rows.reduce((acc, r) => {
@@ -249,6 +249,11 @@ export const exportDailyPlanExcel = (
       ];
 
       const ws = XLSX.utils.json_to_sheet(rowsWithSubtotal, { header: headers });
+      ws['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+    } else {
+      // Keep sheet with headers so all department tabs exist in template
+      const ws = XLSX.utils.json_to_sheet([], { header: headers });
       ws['!cols'] = colWidths;
       XLSX.utils.book_append_sheet(workbook, ws, sheetName);
     }

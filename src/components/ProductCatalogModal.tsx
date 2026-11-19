@@ -166,7 +166,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className="text-xs font-bold text-slate-800">
-                      ${prod.costPrice.toFixed(2)}
+                      ${(prod.costPrice || 0).toFixed(2)}
                     </span>
                     <button
                       type="button"
