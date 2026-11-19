@@ -5,7 +5,11 @@ import {
   getStoredProducts, saveProducts, 
   getStoredRestockItems, saveRestockItems 
 } from './utils/storage';
-import { exportToTakeoPlanExcel, copyToTelegramClipboard } from './utils/export';
+import { 
+  exportToTakeoPlanExcel, 
+  exportToSimplePOExcel, 
+  copyToTelegramClipboard 
+} from './utils/export';
 import { sound } from './utils/audio';
 import { useBarcodeGun } from './hooks/useBarcodeGun';
 
@@ -368,6 +372,7 @@ export const App: React.FC = () => {
           onRemoveItem={handleRemoveItem}
           onClearAll={handleClearAll}
           onExportExcel={(day, filter) => exportToTakeoPlanExcel(restockItems, day, filter)}
+          onExportSimplePO={(filter) => exportToSimplePOExcel(restockItems, filter)}
           onCopyToTelegram={(day, filter) => copyToTelegramClipboard(restockItems, day, filter)}
           onOpenPrintPO={() => setIsPrintPOOpen(true)}
         />

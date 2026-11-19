@@ -14,6 +14,7 @@ interface RestockOrderTableProps {
   onRemoveItem: (itemId: string) => void;
   onClearAll: () => void;
   onExportExcel: (orderDay: OrderDay, supplierFilter?: string) => void;
+  onExportSimplePO?: (supplierFilter?: string) => void;
   onCopyToTelegram: (orderDay: OrderDay, supplierFilter?: string) => void;
   onOpenPrintPO: () => void;
 }
@@ -25,6 +26,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   onRemoveItem,
   onClearAll,
   onExportExcel,
+  onExportSimplePO,
   onCopyToTelegram,
   onOpenPrintPO
 }) => {
@@ -60,6 +62,18 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
       if (!confirm) return;
     }
     onExportExcel(orderDay, supplierFilter);
+  };
+
+  const handleExportSimplePOWithValidation = () => {
+    if (zeroQtyCount > 0) {
+      const confirm = window.confirm(
+        `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្ត Export បញ្ជីកុម្ម៉ង់ PO ដែរឬទេ?`
+      );
+      if (!confirm) return;
+    }
+    if (onExportSimplePO) {
+      onExportSimplePO(supplierFilter);
+    }
   };
 
   const handleCopyTelegram = () => {
@@ -183,11 +197,23 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 <button
                   onClick={handleExportWithValidation}
                   className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
-                  title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Takeo Daily Plan"
+                  title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Takeo Plan (មានទាំង PO Summary + 4 Sheets + ចំនួនត្រូវទិញ)"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>Excel ({orderDay})</span>
+                  <span>Excel Plan ({orderDay})</span>
                 </button>
+
+                {onExportSimplePO && (
+                  <button
+                    onClick={handleExportSimplePOWithValidation}
+                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
+                    title="ទាញយកបញ្ជីកុម្ម៉ង់ PO សាមញ្ញ (1 Sheet)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="hidden sm:inline">Excel</span>
+                    <span>PO សាមញ្ញ</span>
+                  </button>
+                )}
 
                 <button
                   onClick={handleCopyTelegram}
