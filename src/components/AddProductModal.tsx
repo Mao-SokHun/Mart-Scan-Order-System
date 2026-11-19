@@ -18,7 +18,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [barcode, setBarcode] = useState(initialBarcode);
   const [name, setName] = useState('');
   const [khmerName, setKhmerName] = useState('');
-  const [category, setCategory] = useState('ភេសជ្ជៈ (Beverages)');
+  const [category, setCategory] = useState('ទំនិញប្រចាំថ្ងៃ (Daily)');
   const [unit, setUnit] = useState('កំប៉ុង');
   const [costPrice, setCostPrice] = useState('0.50');
   const [sellingPrice, setSellingPrice] = useState('0.75');
@@ -31,7 +31,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const resetForm = () => {
     setName('');
     setKhmerName('');
-    setCategory('ភេសជ្ជៈ (Beverages)');
+    setCategory('ទំនិញប្រចាំថ្ងៃ (Daily)');
     setUnit('កំប៉ុង');
     setCostPrice('0.50');
     setSellingPrice('0.75');
@@ -162,15 +162,22 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               >
-                <option value="ភេសជ្ជៈ (Beverages)">ភេសជ្ជៈ (Beverages)</option>
-                <option value="ស្រាបៀរ (Beer)">ស្រាបៀរ (Beer)</option>
-                <option value="ទឹកបរិសុទ្ធ (Water)">ទឹកបរិសុទ្ធ (Water)</option>
-                <option value="មី និងអាហារក្រៀម (Instant Food)">មី និងអាហារក្រៀម (Instant Food)</option>
-                <option value="នំចំណី (Snacks)">នំចំណី (Snacks)</option>
-                <option value="ទឹកដោះគោ (Dairy)">ទឹកដោះគោ (Dairy)</option>
-                <option value="របស់របរប្រើប្រាស់ (Personal Care)">របស់របរប្រើប្រាស់ (Personal Care)</option>
-                <option value="សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)">សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)</option>
-                <option value="ផ្សេងៗ (Other)">ផ្សេងៗ (Other)</option>
+                <optgroup label="ផ្នែកទាំង ៤ ក្នុង Store Daily Plan">
+                  <option value="ទំនិញប្រចាំថ្ងៃ (Daily)">ទំនិញប្រចាំថ្ងៃ (Daily)</option>
+                  <option value="នំបុ័ង និងនំខេក (Bakery and Cake)">នំបុ័ង និងនំខេក (Bakery and Cake)</option>
+                  <option value="បន្លែ ផ្លែឈើ ស្រស់ (Fresh)">បន្លែ ផ្លែឈើ ស្រស់ (Fresh)</option>
+                  <option value="ទឹកដោះគោ និងយ៉ាអួរ (Milk and Yogurt)">ទឹកដោះគោ និងយ៉ាអួរ (Milk and Yogurt)</option>
+                </optgroup>
+                <optgroup label="ប្រភេទផ្សេងៗ">
+                  <option value="ភេសជ្ជៈ (Beverages)">ភេសជ្ជៈ (Beverages)</option>
+                  <option value="ស្រាបៀរ (Beer)">ស្រាបៀរ (Beer)</option>
+                  <option value="ទឹកបរិសុទ្ធ (Water)">ទឹកបរិសុទ្ធ (Water)</option>
+                  <option value="មី និងអាហារក្រៀម (Instant Food)">មី និងអាហារក្រៀម (Instant Food)</option>
+                  <option value="នំចំណី (Snacks)">នំចំណី (Snacks)</option>
+                  <option value="របស់របរប្រើប្រាស់ (Personal Care)">របស់របរប្រើប្រាស់ (Personal Care)</option>
+                  <option value="សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)">សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)</option>
+                  <option value="ផ្សេងៗ (Other)">ផ្សេងៗ (Other)</option>
+                </optgroup>
               </select>
             </div>
             <div>

@@ -53,6 +53,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     lastScannedCodeRef.current = cleanCode;
     lastScannedTimeRef.current = now;
     setLastScannedCode(cleanCode);
+    setTimeout(() => setLastScannedCode(null), 2500);
     setScanCount(prev => prev + 1);
 
     // Call onScan (handleScan will play beep and show toast)

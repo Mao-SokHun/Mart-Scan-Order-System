@@ -35,6 +35,16 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const [orderDay, setOrderDay] = useState<OrderDay>(getCurrentDayOfWeek());
   const [copiedTelegram, setCopiedTelegram] = useState(false);
 
+  // Auto-scroll to newly scanned or duplicate scanned item
+  React.useEffect(() => {
+    if (highlightedItemId) {
+      const elem = document.getElementById(`restock-item-${highlightedItemId}`);
+      if (elem) {
+        elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [highlightedItemId]);
+
   // Extract unique clean suppliers
   const suppliers = Array.from(new Set(items.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean);
 
@@ -297,6 +307,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               return (
                 <div
                   key={item.id}
+                  id={`restock-item-${item.id}`}
                   className={`p-3.5 transition-all duration-300 ${
                     isHighlighted
                       ? 'bg-amber-100/90 ring-2 ring-amber-400'
@@ -380,7 +391,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => onUpdateQuantity(item.id, Math.max(0, item.orderQuantity - 1))}
+                        onClick={() => onUpdateQuantity(item.id, Math.max(0, (item.orderQuantity || 0) - 1))}
                         className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-700 active:scale-90 transition shadow-2xs font-bold text-base"
                       >
                         <Minus className="w-4 h-4" />
@@ -412,7 +423,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => onUpdateQuantity(item.id, item.orderQuantity + 1)}
+                        onClick={() => onUpdateQuantity(item.id, (item.orderQuantity || 0) + 1)}
                         className="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center active:scale-90 transition shadow-2xs font-bold text-base"
                       >
                         <Plus className="w-4 h-4" />
@@ -486,6 +497,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                   return (
                     <tr 
                       key={item.id} 
+                      id={`restock-item-${item.id}`}
                       className={`transition-all duration-300 ${
                         isHighlighted 
                           ? 'bg-amber-100/90 ring-2 ring-amber-400' 
@@ -589,7 +601,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                           }`}>
                             <button
                               type="button"
-                              onClick={() => onUpdateQuantity(item.id, Math.max(0, item.orderQuantity - 1))}
+                              onClick={() => onUpdateQuantity(item.id, Math.max(0, (item.orderQuantity || 0) - 1))}
                               className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 transition active:scale-95 shadow-2xs"
                             >
                               <Minus className="w-3.5 h-3.5" />
@@ -615,7 +627,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => onUpdateQuantity(item.id, item.orderQuantity + 1)}
+                              onClick={() => onUpdateQuantity(item.id, (item.orderQuantity || 0) + 1)}
                               className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition active:scale-95 shadow-2xs"
                             >
                               <Plus className="w-3.5 h-3.5" />
