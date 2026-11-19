@@ -11,7 +11,11 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  max: 10,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  allowExitOnIdle: true
 });
 
 // Prevent unhandled error event from crashing the server on Neon idle client disconnects
@@ -22,8 +26,165 @@ pool.on('error', (err) => {
 let isDbInitialized = false;
 let dbInitPromise: Promise<void> | null = null;
 
+const SEED_PRODUCTS = [
+  {
+    id: 'p-1',
+    barcode: '8851959132014',
+    name: 'Coca Cola Original Taste 330ml',
+    khmer_name: 'កូកាកូឡា ៣៣០មល',
+    category: 'ភេសជ្ជៈ (Beverages)',
+    unit: 'កំប៉ុង',
+    cost_price: 0.40,
+    selling_price: 0.60,
+    current_stock: 0,
+    min_stock: 24,
+    supplier_name: 'Cambodia Beverage Company (Coca-Cola)',
+    supplier_phone: '023 428 888',
+    image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-2',
+    barcode: '8841002010012',
+    name: 'Angkor Beer Can 330ml',
+    khmer_name: 'ស្រាបៀរអង្គរ កំប៉ុង ៣៣០មល',
+    category: 'ស្រាបៀរ (Beer)',
+    unit: 'កំប៉ុង',
+    cost_price: 0.55,
+    selling_price: 0.85,
+    current_stock: 2,
+    min_stock: 48,
+    supplier_name: 'Cambrew Ltd (Angkor Beer)',
+    supplier_phone: '023 990 001',
+    image: 'https://images.unsplash.com/photo-1608270191599-28269e80bce4?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-3',
+    barcode: '8845000100345',
+    name: 'Vital Premium Water 500ml',
+    khmer_name: 'ទឹកបរិសុទ្ធ វីតាល់ ៥០០មល',
+    category: 'ទឹកបរិសុទ្ធ (Water)',
+    unit: 'ដប',
+    cost_price: 0.20,
+    selling_price: 0.35,
+    current_stock: 0,
+    min_stock: 50,
+    supplier_name: 'N.V.C Corporation (Vital)',
+    supplier_phone: '023 880 880',
+    image: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-4',
+    barcode: '8850124001234',
+    name: 'Carabao Energy Drink 250ml',
+    khmer_name: 'ភេសជ្ជៈប៉ូវកម្លាំង ការ៉ាបាវ',
+    category: 'ភេសជ្ជៈ (Beverages)',
+    unit: 'កំប៉ុង',
+    cost_price: 0.42,
+    selling_price: 0.65,
+    current_stock: 1,
+    min_stock: 30,
+    supplier_name: 'Carabao Cambodia Distribution',
+    supplier_phone: '012 345 678',
+    image: 'https://images.unsplash.com/photo-1622543925917-763c34d1a86e?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-5',
+    barcode: '8850999001122',
+    name: 'Mama Instant Noodles Shrimp Tom Yum',
+    khmer_name: 'មីម៉ាម៉ា តុងយុាំបង្គា ៦០ក្រាម',
+    category: 'មី និងអាហារក្រៀម (Instant Food)',
+    unit: 'កញ្ចប់',
+    cost_price: 0.25,
+    selling_price: 0.40,
+    current_stock: 0,
+    min_stock: 60,
+    supplier_name: 'DKSH (Cambodia) Ltd',
+    supplier_phone: '023 212 838',
+    image: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-6',
+    barcode: '8851007011456',
+    name: 'Ovaltine UHT Chocolate Malt 180ml',
+    khmer_name: 'ទឹកដោះគោ អូវ៉ាន់ទីន ១៨០មល',
+    category: 'ទឹកដោះគោ (Dairy)',
+    unit: 'ប្រអប់',
+    cost_price: 0.35,
+    selling_price: 0.55,
+    current_stock: 4,
+    min_stock: 36,
+    supplier_name: 'DKSH (Cambodia) Ltd',
+    supplier_phone: '023 212 838',
+    image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-7',
+    barcode: '8851111222334',
+    name: 'Colgate Total 12 Toothpaste 150g',
+    khmer_name: 'ថ្នាំដុសធ្មេញ កុលហ្គេត ១៥០ក្រាម',
+    category: 'របស់របរប្រើប្រាស់ (Personal Care)',
+    unit: 'ប្រអប់',
+    cost_price: 1.20,
+    selling_price: 1.80,
+    current_stock: 0,
+    min_stock: 12,
+    supplier_name: 'Unilever / DKSH Cambodia',
+    supplier_phone: '023 212 838',
+    image: 'https://images.unsplash.com/photo-1559671089-a2e63cbfa311?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-8',
+    barcode: '8852345678901',
+    name: 'Pocky Chocolate Biscuit Sticks 47g',
+    khmer_name: 'នំផុកគី សូកូឡា ៤៧ក្រាម',
+    category: 'នំចំណី (Snacks)',
+    unit: 'ប្រអប់',
+    cost_price: 0.65,
+    selling_price: 1.00,
+    current_stock: 0,
+    min_stock: 20,
+    supplier_name: 'Thai Seng Trading Co., Ltd',
+    supplier_phone: '023 881 234',
+    image: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-9',
+    barcode: '8858765432109',
+    name: 'DAO 3-in-1 Instant Coffee Original (30 sticks)',
+    khmer_name: 'កាហ្វេ ដាវ ៣ក្នុង១ កញ្ចប់ធំ',
+    category: 'កាហ្វេ និងតែ (Coffee & Tea)',
+    unit: 'កញ្ចប់',
+    cost_price: 3.50,
+    selling_price: 4.80,
+    current_stock: 1,
+    min_stock: 10,
+    supplier_name: 'DAO Coffee Cambodia',
+    supplier_phone: '092 888 999',
+    image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'p-10',
+    barcode: '8853456789012',
+    name: 'Sunlight Lemon Dishwashing Liquid 750ml',
+    khmer_name: 'ទឹកលាងចាន សាន់ឡាយ ក្រូចឆ្មា ៧៥០មល',
+    category: 'សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)',
+    unit: 'ដប',
+    cost_price: 1.10,
+    selling_price: 1.65,
+    current_stock: 0,
+    min_stock: 15,
+    supplier_name: 'Unilever Cambodia',
+    supplier_phone: '023 218 555',
+    image: 'https://images.unsplash.com/photo-1585421514738-01798e348b17?w=300&auto=format&fit=crop&q=80'
+  }
+];
+
 export const initDb = async () => {
   if (isDbInitialized) return;
+  if (!process.env.DATABASE_URL) {
+    console.warn('⚠️ DATABASE_URL is not set. Database initialization skipped.');
+    return;
+  }
   if (dbInitPromise) return dbInitPromise;
 
   dbInitPromise = (async () => {
@@ -79,6 +240,28 @@ export const initDb = async () => {
         );
       `);
 
+      // 4. Seed initial products if table is completely empty
+      const countRes = await client.query('SELECT COUNT(*) FROM products;');
+      const count = parseInt(countRes.rows[0].count, 10);
+      if (count === 0) {
+        console.log('🌱 Seeding initial sample products to Neon PostgreSQL...');
+        for (const p of SEED_PRODUCTS) {
+          await client.query(`
+            INSERT INTO products (
+              id, barcode, name, khmer_name, category, unit,
+              cost_price, selling_price, current_stock, min_stock,
+              supplier_name, supplier_phone, image
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ON CONFLICT (barcode) DO NOTHING;
+          `, [
+            p.id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
+            p.cost_price, p.selling_price, p.current_stock, p.min_stock,
+            p.supplier_name, p.supplier_phone, p.image
+          ]);
+        }
+        console.log('✅ Seeded 10 initial products successfully!');
+      }
+
       isDbInitialized = true;
     } catch (err) {
       console.error('Database initialization error:', err);
@@ -94,21 +277,36 @@ export const initDb = async () => {
 export const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Helper to safely parse floating point numbers
+const safeFloat = (val: any, fallback = 0): number => {
+  if (val === null || val === undefined) return fallback;
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback : parsed;
+};
+
+// Helper to safely parse integers
+const safeInt = (val: any, fallback = 0): number => {
+  if (val === null || val === undefined) return fallback;
+  const parsed = parseInt(val, 10);
+  return isNaN(parsed) ? fallback : parsed;
+};
 
 // Helper to map DB snake_case product row to frontend Product type
 const mapProduct = (row: any) => ({
-  id: row.id,
-  barcode: row.barcode,
-  name: row.name,
+  id: String(row.product_id || row.id || ''),
+  barcode: String(row.barcode || ''),
+  name: String(row.name || ''),
   khmerName: row.khmer_name || undefined,
-  category: row.category,
-  unit: row.unit,
-  costPrice: parseFloat(row.cost_price),
-  sellingPrice: parseFloat(row.selling_price),
-  currentStock: parseInt(row.current_stock, 10),
-  minStock: parseInt(row.min_stock, 10),
-  supplierName: row.supplier_name,
+  category: row.category || 'ផ្សេងៗ (Other)',
+  unit: row.unit || 'កំប៉ុង',
+  costPrice: safeFloat(row.cost_price, 0),
+  sellingPrice: safeFloat(row.selling_price, 0),
+  currentStock: safeInt(row.current_stock, 0),
+  minStock: safeInt(row.min_stock, 10),
+  supplierName: row.supplier_name || 'ទូទៅ (General Supplier)',
   supplierPhone: row.supplier_phone || undefined,
   image: row.image || undefined,
   createdAt: row.created_at,
@@ -117,13 +315,13 @@ const mapProduct = (row: any) => ({
 
 // Helper to map DB row to RestockItem
 const mapRestockItem = (row: any) => ({
-  id: row.id,
+  id: String(row.id || ''),
   product: mapProduct(row),
-  orderQuantity: parseInt(row.order_quantity, 10),
-  scannedAt: row.scanned_at,
-  unitCost: parseFloat(row.unit_cost),
-  totalCost: parseFloat(row.total_cost),
-  status: row.status,
+  orderQuantity: safeInt(row.order_quantity, 0),
+  scannedAt: row.scanned_at || new Date().toISOString(),
+  unitCost: safeFloat(row.unit_cost, 0),
+  totalCost: safeFloat(row.total_cost, 0),
+  status: row.status || 'pending',
   note: row.note || undefined
 });
 
@@ -141,6 +339,12 @@ app.use(async (_req, _res, next) => {
 
 // 1. Health check & DB status
 app.get('/api/health', async (_req: Request, res: Response) => {
+  if (!process.env.DATABASE_URL) {
+    return res.status(503).json({
+      status: 'error',
+      message: 'DATABASE_URL is not configured'
+    });
+  }
   try {
     const result = await pool.query('SELECT NOW() as now, current_database() as db;');
     res.json({
@@ -154,10 +358,23 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   }
 });
 
-// 2. GET all products
-app.get('/api/products', async (_req: Request, res: Response) => {
+// 2. GET all products (with optional search query: ?search=... or ?q=...)
+app.get('/api/products', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM products ORDER BY name ASC;');
+    const search = req.query.search || req.query.q;
+    let result;
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = `%${search.trim().toLowerCase()}%`;
+      result = await pool.query(`
+        SELECT * FROM products 
+        WHERE LOWER(barcode) LIKE $1 
+           OR LOWER(name) LIKE $1 
+           OR LOWER(COALESCE(khmer_name, '')) LIKE $1
+        ORDER BY name ASC;
+      `, [q]);
+    } else {
+      result = await pool.query('SELECT * FROM products ORDER BY name ASC;');
+    }
     res.json(result.rows.map(mapProduct));
   } catch (err: any) {
     console.error('Error fetching products:', err);
@@ -169,9 +386,13 @@ app.get('/api/products', async (_req: Request, res: Response) => {
 app.get('/api/products/barcode/:barcode', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.params;
-    const result = await pool.query('SELECT * FROM products WHERE LOWER(barcode) = LOWER($1) LIMIT 1;', [barcode.trim()]);
+    const cleanBarcode = String(barcode || '').trim();
+    if (!cleanBarcode) {
+      return res.status(400).json({ error: 'Barcode is required' });
+    }
+    const result = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Product not found', barcode });
+      return res.status(404).json({ error: 'Product not found', barcode: cleanBarcode });
     }
     res.json(mapProduct(result.rows[0]));
   } catch (err: any) {
@@ -186,16 +407,17 @@ app.post('/api/products', async (req: Request, res: Response) => {
       barcode, name, khmerName, category, unit,
       costPrice, sellingPrice, currentStock, minStock,
       supplierName, supplierPhone, image
-    } = req.body;
+    } = req.body || {};
 
     if (!barcode || !name) {
       return res.status(400).json({ error: 'Barcode and Name are required' });
     }
 
     const cleanBarcode = String(barcode).trim();
+    const cleanName = String(name).trim();
 
     // Check if barcode already exists (case-insensitive)
-    const existing = await pool.query('SELECT * FROM products WHERE LOWER(barcode) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    const existing = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ 
         error: `Barcode "${cleanBarcode}" មានរួចហើយក្នុងប្រព័ន្ធ! (ឈ្មោះ: ${existing.rows[0].name})`,
@@ -212,11 +434,11 @@ app.post('/api/products', async (req: Request, res: Response) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *;
     `, [
-      id, cleanBarcode, name.trim(), khmerName?.trim() || null,
-      category || 'ផ្សេងៗ (Other)', unit || 'កំប៉ុង',
-      Math.max(0, parseFloat(costPrice) || 0), Math.max(0, parseFloat(sellingPrice) || 0),
-      Math.max(0, parseInt(currentStock, 10) || 0), Math.max(0, parseInt(minStock, 10) || 10),
-      supplierName?.trim() || 'ទូទៅ (General Supplier)', supplierPhone?.trim() || null,
+      id, cleanBarcode, cleanName, khmerName ? String(khmerName).trim() : null,
+      category ? String(category).trim() : 'ផ្សេងៗ (Other)', unit ? String(unit).trim() : 'កំប៉ុង',
+      Math.max(0, safeFloat(costPrice, 0)), Math.max(0, safeFloat(sellingPrice, 0)),
+      Math.max(0, safeInt(currentStock, 0)), Math.max(0, safeInt(minStock, 10)),
+      supplierName ? String(supplierName).trim() : 'ទូទៅ (General Supplier)', supplierPhone ? String(supplierPhone).trim() : null,
       image || null
     ]);
 
@@ -251,25 +473,25 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
 // 6. POST /api/restock/scan - CORE SCAN ENDPOINT
 app.post('/api/restock/scan', async (req: Request, res: Response) => {
   try {
-    const { barcode } = req.body;
+    const { barcode } = req.body || {};
     if (!barcode) {
       return res.status(400).json({ error: 'Barcode is required' });
     }
 
-    const cleanBarcode = barcode.trim();
+    const cleanBarcode = String(barcode).trim();
 
     // 1. Find product (case-insensitive for barcode matching)
-    const prodRes = await pool.query('SELECT * FROM products WHERE LOWER(barcode) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    const prodRes = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
     if (prodRes.rows.length === 0) {
       return res.status(404).json({ found: false, barcode: cleanBarcode, message: 'Barcode not found in catalog' });
     }
 
     const prod = prodRes.rows[0];
-    const costPrice = parseFloat(prod.cost_price) || 0;
+    const costPrice = safeFloat(prod.cost_price, 0);
 
     // 2. Check if already in restock_items (by product_id or barcode)
     const existingRes = await pool.query(
-      'SELECT * FROM restock_items WHERE product_id = $1 OR LOWER(barcode) = LOWER($2) LIMIT 1;',
+      'SELECT * FROM restock_items WHERE product_id = $1 OR LOWER(TRIM(barcode)) = LOWER($2) LIMIT 1;',
       [prod.id, cleanBarcode]
     );
 
@@ -329,38 +551,60 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
   }
 });
 
-// 7. PUT update quantity of restock item
+// 7. PUT update quantity of restock item (supports update by item ID or product ID, with auto-upsert)
 app.put('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { orderQuantity } = req.body;
-    const qty = Math.max(0, parseInt(orderQuantity, 10) || 0);
+    const { orderQuantity } = req.body || {};
+    const qty = Math.max(0, safeInt(orderQuantity, 0));
 
-    const check = await pool.query('SELECT unit_cost FROM restock_items WHERE id = $1;', [id]);
+    // Check if restock item exists by ID or product_id
+    const check = await pool.query(
+      'SELECT id, product_id, unit_cost FROM restock_items WHERE id = $1 OR product_id = $1 LIMIT 1;',
+      [id]
+    );
+
     if (check.rows.length === 0) {
+      // If item was added offline, check products table to auto-upsert
+      const prodCheck = await pool.query(
+        'SELECT * FROM products WHERE id = $1 OR LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;',
+        [id]
+      );
+      if (prodCheck.rows.length > 0) {
+        const prod = prodCheck.rows[0];
+        const unitCost = safeFloat(prod.cost_price, 0);
+        const totalCost = qty * unitCost;
+        const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        await pool.query(`
+          INSERT INTO restock_items (id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at)
+          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);
+        `, [newId, prod.id, prod.barcode, qty, unitCost, totalCost]);
+        return res.json({ success: true, id: newId, orderQuantity: qty, totalCost });
+      }
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    const unitCost = parseFloat(check.rows[0].unit_cost);
+    const row = check.rows[0];
+    const unitCost = safeFloat(row.unit_cost, 0);
     const totalCost = qty * unitCost;
 
     await pool.query(`
       UPDATE restock_items
       SET order_quantity = $1, total_cost = $2
       WHERE id = $3;
-    `, [qty, totalCost, id]);
+    `, [qty, totalCost, row.id]);
 
-    res.json({ success: true, orderQuantity: qty, totalCost });
+    res.json({ success: true, id: row.id, orderQuantity: qty, totalCost });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 8. DELETE single item from restock list
+// 8. DELETE single item from restock list (supports deletion by item ID or product ID)
 app.delete('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM restock_items WHERE id = $1;', [id]);
+    await pool.query('DELETE FROM restock_items WHERE id = $1 OR product_id = $1;', [id]);
     res.json({ success: true, deletedId: id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -375,6 +619,21 @@ app.delete('/api/restock', async (_req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Global JSON error handler to prevent HTML error leak to API consumers
+app.use((err: any, _req: Request, res: Response, _next: any) => {
+  console.error('Unhandled API Error:', err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: err.message || 'Internal Server Error',
+    status
+  });
+});
+
+// 404 handler for unknown API routes
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
 export default app;
