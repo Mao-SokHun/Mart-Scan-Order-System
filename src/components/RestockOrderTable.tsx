@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { RestockItem } from '../types';
+import { OrderDay, getCurrentDayOfWeek } from '../utils/export';
 import { 
   Trash2, Plus, Minus, FileSpreadsheet, Printer, 
   Send, Search, Filter, ShoppingBag, AlertTriangle, 
-  Check, Phone, AlertCircle 
+  Check, Phone, AlertCircle, Calendar 
 } from 'lucide-react';
 
 interface RestockOrderTableProps {
@@ -12,8 +13,8 @@ interface RestockOrderTableProps {
   onUpdateQuantity: (itemId: string, newQty: number) => void;
   onRemoveItem: (itemId: string) => void;
   onClearAll: () => void;
-  onExportExcel: (supplierFilter?: string) => void;
-  onCopyToTelegram: (supplierFilter?: string) => void;
+  onExportExcel: (orderDay: OrderDay, supplierFilter?: string) => void;
+  onCopyToTelegram: (orderDay: OrderDay, supplierFilter?: string) => void;
   onOpenPrintPO: () => void;
 }
 
@@ -29,6 +30,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 }) => {
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [orderDay, setOrderDay] = useState<OrderDay>(getCurrentDayOfWeek());
   const [copiedTelegram, setCopiedTelegram] = useState(false);
 
   // Extract unique suppliers
@@ -57,7 +59,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
       );
       if (!confirm) return;
     }
-    onExportExcel(supplierFilter);
+    onExportExcel(orderDay, supplierFilter);
   };
 
   const handleCopyTelegram = () => {
@@ -67,7 +69,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
       );
       if (!confirm) return;
     }
-    onCopyToTelegram(supplierFilter);
+    onCopyToTelegram(orderDay, supplierFilter);
     setCopiedTelegram(true);
     setTimeout(() => setCopiedTelegram(false), 2000);
   };
@@ -159,13 +161,32 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 justify-end flex-wrap pt-1 sm:pt-0">
             {items.length > 0 && (
               <>
+                {/* Order Day Selector */}
+                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl sm:rounded-lg px-2.5 py-1.5 text-xs shadow-2xs">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="text-slate-400 font-medium text-[11px] hidden sm:inline">ថ្ងៃកុម្ម៉ង់:</span>
+                  <select
+                    value={orderDay}
+                    onChange={(e) => setOrderDay(e.target.value as OrderDay)}
+                    className="bg-transparent font-bold text-blue-700 text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="Mon">Mon (ច័ន្ទ)</option>
+                    <option value="Tue">Tue (អង្គារ)</option>
+                    <option value="Wed">Wed (ពុធ)</option>
+                    <option value="Thu">Thu (ព្រហស្បតិ៍)</option>
+                    <option value="Fri">Fri (សុក្រ)</option>
+                    <option value="Sat">Sat (សៅរ៍)</option>
+                    <option value="Sun">Sun (អាទិត្យ)</option>
+                  </select>
+                </div>
+
                 <button
                   onClick={handleExportWithValidation}
-                  className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
-                  title="ទាញយកជាឯកសារ Excel"
+                  className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
+                  title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Takeo Daily Plan"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>Excel</span>
+                  <span>Excel ({orderDay})</span>
                 </button>
 
                 <button
