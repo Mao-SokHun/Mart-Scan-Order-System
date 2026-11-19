@@ -39,6 +39,11 @@ export const App: React.FC = () => {
   const [showTestSheet, setShowTestSheet] = useState(true);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
 
+  const handleOpenCamera = () => {
+    sound.warmup();
+    setIsCameraOpen(true);
+  };
+
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -305,7 +310,7 @@ export const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setIsCameraOpen(true)}
+              onClick={handleOpenCamera}
               className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition active:scale-95"
             >
               <Camera className="w-4 h-4" />
@@ -352,7 +357,7 @@ export const App: React.FC = () => {
         {/* Barcode Input Section */}
         <ManualBarcodeInput
           onScan={handleScan}
-          onOpenCamera={() => setIsCameraOpen(true)}
+          onOpenCamera={handleOpenCamera}
         />
 
         {/* Restock Order Table */}
@@ -434,7 +439,7 @@ export const App: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setIsCameraOpen(true)}
+          onClick={handleOpenCamera}
           className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 active:scale-95 text-white rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md shadow-blue-500/25 shrink-0"
         >
           <Camera className="w-4 h-4" />

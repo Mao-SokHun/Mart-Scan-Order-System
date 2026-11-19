@@ -16,6 +16,17 @@ class SoundEffects {
     return this.ctx;
   }
 
+  warmup() {
+    try {
+      const ctx = this.getContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume();
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
   playSuccessBeep() {
     try {
       const ctx = this.getContext();
