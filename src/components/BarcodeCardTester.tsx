@@ -83,12 +83,12 @@ export const BarcodeCardTester: React.FC<BarcodeCardTesterProps> = ({
         </div>
       </div>
 
-      {/* Barcode cards grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+      {/* Barcode cards grid - smooth horizontal swipe on mobile, grid on desktop */}
+      <div className="flex sm:grid sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-3 overflow-x-auto pb-2 sm:pb-0 scrollbar-none">
         {products.slice(0, 5).map((prod) => (
           <div
             key={prod.id}
-            className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-2xl p-3 flex flex-col justify-between transition group"
+            className="w-[155px] sm:w-auto bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between transition group shrink-0 sm:shrink"
           >
             <div>
               <div className="flex items-center justify-between gap-1 mb-1.5">

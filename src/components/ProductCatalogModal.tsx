@@ -45,31 +45,31 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 backdrop-blur-xs animate-fade-in">
-      <div className="relative w-full max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-3 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="relative w-full max-w-4xl bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200">
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 border-b border-slate-200">
+          <div className="flex items-center gap-2">
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
               <Package className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800 text-base">បញ្ជីទំនិញក្នុង Mart (Product Catalog)</h3>
-              <p className="text-xs text-slate-500">មានសរុប {products.length} មុខទំនិញដែលបានចុះឈ្មោះ</p>
+              <h3 className="font-bold text-slate-800 text-sm sm:text-base">បញ្ជីទំនិញ (Catalog)</h3>
+              <p className="text-[11px] sm:text-xs text-slate-500">មានសរុប {products.length} មុខទំនិញ</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={onOpenAddNew}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs"
+              className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-2xs active:scale-95"
             >
-              <Plus className="w-4 h-4" />
-              <span>បន្ថែមទំនិញថ្មី</span>
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">បន្ថែមទំនិញ</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 active:scale-95 transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -77,7 +77,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
         </div>
 
         {/* Filters */}
-        <div className="p-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div className="p-3 sm:p-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center justify-between">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -93,7 +93,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl text-xs px-3 py-2 text-slate-700 focus:outline-none"
+              className="flex-1 sm:flex-none bg-slate-50 border border-slate-200 rounded-xl text-xs px-2.5 py-2 text-slate-700 focus:outline-none"
             >
               <option value="all">ប្រភេទទាំងអស់ ({products.length})</option>
               {categories.map(c => (
@@ -104,7 +104,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
             <button
               onClick={onResetDemoData}
               title="កំណត់ទិន្នន័យគំរូដើមឡើងវិញ"
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition shrink-0 active:scale-95"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -112,7 +112,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
         </div>
 
         {/* Product Grid / List */}
-        <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="p-3.5 sm:p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3.5">
           {filtered.length === 0 ? (
             <div className="col-span-full py-12 text-center text-slate-400 text-xs">
               រកមិនឃើញទំនិញទេ

@@ -61,29 +61,29 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 backdrop-blur-xs animate-fade-in">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-3 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="relative w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200">
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 border-b border-slate-200">
+          <div className="flex items-center gap-2">
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
               <PackagePlus className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800 text-base">ចុះឈ្មោះទំនិញថ្មី</h3>
-              <p className="text-xs text-slate-500">បង្កើតទិន្នន័យទំនិញថ្មីសម្រាប់ Barcode នេះ</p>
+              <h3 className="font-bold text-slate-800 text-sm sm:text-base">ចុះឈ្មោះទំនិញថ្មី</h3>
+              <p className="text-[11px] sm:text-xs text-slate-500">បង្កើតទិន្នន័យទំនិញថ្មីសម្រាប់ Barcode នេះ</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 active:scale-95 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-3.5 sm:space-y-4">
           {initialBarcode && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
