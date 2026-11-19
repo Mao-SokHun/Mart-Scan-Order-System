@@ -179,8 +179,8 @@ export const exportDailyPlanExcel = (
   });
 
   // Add Grand Total row to summary sheet
-  const totalQty = filteredItems.reduce((acc, curr) => acc + curr.orderQuantity, 0);
-  const totalCost = filteredItems.reduce((acc, curr) => acc + curr.totalCost, 0);
+  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
+  const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
   summaryRows.push({
     'ល.រ': '',
     'កូដទំនិញ (Barcode)': '',
@@ -191,7 +191,7 @@ export const exportDailyPlanExcel = (
     'ឯកតា (Unit)': '',
     'ចំនួនត្រូវទិញ (Order Qty)': totalQty,
     'តម្លៃដើមឯកតា (Unit Cost)': '',
-    'សរុបទឹកប្រាក់ (Total Cost)': `$${totalCost.toFixed(2)}`,
+    'សរុបទឹកប្រាក់ (Total Cost)': `$${(totalCost || 0).toFixed(2)}`,
     'ថ្ងៃកុម្ម៉ង់ (Order Day)': orderDay,
     'Remark': ''
   } as any);

@@ -32,11 +32,11 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
   const orderableItems = items.filter(i => i.orderQuantity > 0);
   const displayItems = orderableItems.length > 0 ? orderableItems : items;
 
-  const suppliers = Array.from(new Set(displayItems.map(i => i.product.supplierName)));
+  const suppliers = Array.from(new Set(displayItems.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean);
 
   const filteredItems = selectedSupplier === 'all'
     ? displayItems
-    : displayItems.filter(i => i.product.supplierName === selectedSupplier);
+    : displayItems.filter(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim() === selectedSupplier);
 
   const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
@@ -47,8 +47,8 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white animate-fade-in">
-      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto print:border-none print:shadow-none print:rounded-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-xs overflow-y-auto print:static print:block print:p-0 print:bg-white print:overflow-visible animate-fade-in">
+      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto print:border-none print:shadow-none print:rounded-none print:static print:max-w-none print:w-full print:overflow-visible">
         {/* Header toolbar (Hidden when printing) */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white print:hidden">
           <div className="flex items-center gap-2">
@@ -138,7 +138,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
             </thead>
             <tbody className="divide-y divide-slate-200">
               {filteredItems.map((item, idx) => (
-                <tr key={item.id}>
+                <tr key={item.id} className="print:break-inside-avoid">
                   <td className="py-2 px-2 text-center text-slate-500 font-mono">{idx + 1}</td>
                   <td className="py-2 px-3 font-mono text-[11px] text-slate-600">{item.product.barcode}</td>
                   <td className="py-2 px-3">
@@ -165,7 +165,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
           </table>
 
           {/* Signature Sections */}
-          <div className="grid grid-cols-3 gap-6 pt-12 mt-12 border-t border-slate-200 text-center text-xs">
+          <div className="grid grid-cols-3 gap-6 pt-12 mt-12 border-t border-slate-200 text-center text-xs print:break-inside-avoid">
             <div>
               <div className="border-b border-slate-400 pb-1 mb-2"></div>
               <p className="font-semibold text-slate-800">អ្នករៀបចំបញ្ជី (Staff)</p>

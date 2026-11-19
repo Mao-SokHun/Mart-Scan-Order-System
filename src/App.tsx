@@ -70,10 +70,25 @@ export const App: React.FC = () => {
           api.getProducts(),
           api.getRestockItems()
         ]);
-        setProducts(dbProducts);
-        setRestockItems(dbRestock);
-        saveProducts(dbProducts);
-        saveRestockItems(dbRestock);
+        if (dbProducts && dbProducts.length > 0) {
+          setProducts(dbProducts);
+          saveProducts(dbProducts);
+        }
+        setRestockItems(prevLocal => {
+          if (!prevLocal || prevLocal.length === 0) {
+            saveRestockItems(dbRestock);
+            return dbRestock;
+          }
+          const merged = [...dbRestock];
+          for (const localItem of prevLocal) {
+            const exists = merged.some(m => m.product.id === localItem.product.id || m.id === localItem.id);
+            if (!exists) {
+              merged.push(localItem);
+            }
+          }
+          saveRestockItems(merged);
+          return merged;
+        });
       }
     } catch (err) {
       console.warn('Backend not reached yet, using local storage cache:', err);

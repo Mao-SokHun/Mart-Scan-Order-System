@@ -34,9 +34,15 @@
 
 /* Print Styles for Purchase Order */
 @media print {
-  body {
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+  body, html {
     background: white !important;
     color: black !important;
+    height: auto !important;
+    overflow: visible !important;
   }
   
   /* Hide main app background, header, buttons, and mobile bottom bar when printing modal */

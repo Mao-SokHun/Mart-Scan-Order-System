@@ -34,16 +34,18 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
 
   if (!isOpen) return null;
 
-  const categories = Array.from(new Set(products.map(p => p.category)));
+  const categories = Array.from(new Set(products.map(p => (p.category || 'ផ្សេងៗ (Other)').trim()))).filter(Boolean);
 
   const filtered = products.filter(p => {
-    const matchesCat = selectedCategory === 'all' || p.category === selectedCategory;
-    const q = searchQuery.toLowerCase();
+    const cat = (p.category || 'ផ្សេងៗ (Other)').trim();
+    const matchesCat = selectedCategory === 'all' || cat === selectedCategory;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return matchesCat;
     const matchesSearch = 
-      p.name.toLowerCase().includes(q) ||
+      (p.name || '').toLowerCase().includes(q) ||
       (p.khmerName && p.khmerName.toLowerCase().includes(q)) ||
-      p.barcode.includes(q) ||
-      p.supplierName.toLowerCase().includes(q);
+      (p.barcode || '').toLowerCase().includes(q) ||
+      (p.supplierName && p.supplierName.toLowerCase().includes(q));
     return matchesCat && matchesSearch;
   });
 
