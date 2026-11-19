@@ -7,10 +7,20 @@ interface UseBarcodeGunOptions {
   enabled?: boolean;
 }
 
+/**
+ * Universal Hardware Barcode Scanner Gun Hook
+ * Works with:
+ * - USB Wired Barcode Guns (Plug & Play)
+ * - 2.4GHz Wireless USB Dongle Scanners
+ * - Bluetooth POS Barcode Scanners
+ * - Desktop Hands-Free Omni-directional Scanners (POS Mart Scanners)
+ * 
+ * Works anywhere on the webpage without needing to focus on an input box!
+ */
 export const useBarcodeGun = ({
   onScan,
   minChars = 3,
-  maxDelayMs = 50, // scanner guns send keys very fast (<30-50ms)
+  maxDelayMs = 75, // Supports both fast USB (<20ms) and wireless Bluetooth (<75ms)
   enabled = true,
 }: UseBarcodeGunOptions) => {
   const [lastScanned, setLastScanned] = useState<string | null>(null);
@@ -23,8 +33,21 @@ export const useBarcodeGun = ({
   useEffect(() => {
     if (!enabled) return;
 
+    const processBuffer = () => {
+      const code = bufferRef.current.trim();
+      if (code.length >= minChars) {
+        setLastScanned(code);
+        setIsReceivingGunInput(false);
+        bufferRef.current = '';
+        onScan(code);
+      } else {
+        bufferRef.current = '';
+        setIsReceivingGunInput(false);
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't capture function keys, alt, ctrl, meta
+      // Don't capture keyboard shortcuts (Ctrl+C, Alt+Tab, etc.)
       if (e.altKey || e.ctrlKey || e.metaKey) return;
 
       const currentTime = performance.now();
@@ -35,47 +58,54 @@ export const useBarcodeGun = ({
       const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
       const isBarcodeSpecificInput = target && target.getAttribute('data-barcode-input') === 'true';
 
-      // If user is typing in a regular form input and it's slow (human typing), let normal input handle it
+      // If user is human typing slowly in another input (like search box), let normal input handle it
       if (isInput && !isBarcodeSpecificInput && timeDiff > maxDelayMs && bufferRef.current.length === 0) {
         return;
       }
 
-      // Handle Enter (which scanner guns emit at the end of the scan)
-      if (e.key === 'Enter') {
+      // Handle standard Scanner Terminator keys: Enter, Tab, or NumpadEnter
+      if (e.key === 'Enter' || e.key === 'Tab') {
         if (bufferRef.current.length >= minChars) {
           e.preventDefault();
           e.stopPropagation();
-          const barcode = bufferRef.current.trim();
-          setLastScanned(barcode);
-          setIsReceivingGunInput(false);
-          bufferRef.current = '';
-          onScan(barcode);
+
+          // If focused on an input, blur it or clear it so barcode doesn't dirty the field
+          if (isInput && !isBarcodeSpecificInput && target instanceof HTMLInputElement) {
+            target.blur();
+          }
+
+          processBuffer();
         } else {
           bufferRef.current = '';
         }
         return;
       }
 
-      // Scanner sends printable characters (length === 1)
+      // Scanner sends single printable characters (numbers, letters, hyphens)
       if (e.key.length === 1) {
-        // If the gap between keys is too long, reset the buffer (it was human typing, not a scanner gun)
+        // If the gap between keys is longer than scanner speed, reset buffer (it was human typing)
         if (timeDiff > maxDelayMs && bufferRef.current.length > 0) {
           bufferRef.current = '';
         }
 
         bufferRef.current += e.key;
 
-        // If at least 3 characters came in rapidly, set indicator
+        // Scanner guns type rapidly: if 3+ characters arrived under scanner latency, show indicator
         if (bufferRef.current.length >= 3) {
           setIsReceivingGunInput(true);
         }
 
-        // Auto-clear buffer if user paused
+        // Auto-complete fallback for scanners that have NO suffix (no Enter configured)
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = window.setTimeout(() => {
-          bufferRef.current = '';
-          setIsReceivingGunInput(false);
-        }, 150);
+          // If 8+ digits arrived rapidly (standard barcode) and scanner paused, process it
+          if (bufferRef.current.length >= 8) {
+            processBuffer();
+          } else {
+            bufferRef.current = '';
+            setIsReceivingGunInput(false);
+          }
+        }, 120);
       }
     };
 
