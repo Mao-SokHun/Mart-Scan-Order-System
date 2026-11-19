@@ -351,7 +351,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-400">តម្លៃដើម: </span>
-                      <span className="font-bold text-slate-800">${item.unitCost.toFixed(2)}</span>
+                      <span className="font-bold text-slate-800">${(item.unitCost || 0).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -404,7 +404,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                     <div className="text-right shrink-0">
                       <span className="text-[10px] text-slate-400 block">សរុបទឹកប្រាក់</span>
                       <span className="text-sm font-extrabold text-emerald-600">
-                        ${item.totalCost.toFixed(2)}
+                        ${(item.totalCost || 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -553,7 +553,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                       {/* Unit Cost */}
                       <td className="py-3.5 px-3 text-right font-medium text-slate-600">
-                        ${item.unitCost.toFixed(2)}
+                        ${(item.unitCost || 0).toFixed(2)}
                       </td>
 
                       {/* Order Quantity Controller (Admin Focus) */}
@@ -610,7 +610,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                       {/* Total Cost */}
                       <td className="py-3.5 px-3 text-right font-bold text-slate-800">
-                        ${item.totalCost.toFixed(2)}
+                        ${(item.totalCost || 0).toFixed(2)}
                       </td>
 
                       {/* Delete action */}

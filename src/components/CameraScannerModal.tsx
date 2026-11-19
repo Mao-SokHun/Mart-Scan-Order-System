@@ -73,6 +73,18 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         setTorchOn(false);
       }
     }
+
+    // Explicitly stop all media stream tracks so camera hardware turns off immediately
+    try {
+      const videoElem = document.querySelector(`#${readerElementId} video`) as HTMLVideoElement;
+      if (videoElem && videoElem.srcObject) {
+        const stream = videoElem.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoElem.srcObject = null;
+      }
+    } catch {
+      // Ignore
+    }
   }, []);
 
   const startScanner = useCallback(async (cameraIdToUse?: string) => {

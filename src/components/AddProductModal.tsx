@@ -28,11 +28,26 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [supplierPhone, setSupplierPhone] = useState('');
   const [addToOrderNow, setAddToOrderNow] = useState(true);
 
+  const resetForm = () => {
+    setName('');
+    setKhmerName('');
+    setCategory('ភេសជ្ជៈ (Beverages)');
+    setUnit('កំប៉ុង');
+    setCostPrice('0.50');
+    setSellingPrice('0.75');
+    setCurrentStock('0');
+    setMinStock('24');
+    setSupplierName('');
+    setSupplierPhone('');
+  };
+
   useEffect(() => {
-    if (initialBarcode) {
-      setBarcode(initialBarcode);
+    if (isOpen) {
+      setBarcode(initialBarcode || '');
+    } else {
+      resetForm();
     }
-  }, [initialBarcode]);
+  }, [isOpen, initialBarcode]);
 
   if (!isOpen) return null;
 
@@ -47,16 +62,17 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       khmerName: khmerName.trim() || undefined,
       category,
       unit,
-      costPrice: parseFloat(costPrice) || 0,
-      sellingPrice: parseFloat(sellingPrice) || 0,
-      currentStock: parseInt(currentStock) || 0,
-      minStock: parseInt(minStock) || 10,
+      costPrice: Math.max(0, parseFloat(costPrice) || 0),
+      sellingPrice: Math.max(0, parseFloat(sellingPrice) || 0),
+      currentStock: Math.max(0, parseInt(currentStock, 10) || 0),
+      minStock: Math.max(0, parseInt(minStock, 10) || 10),
       supplierName: supplierName.trim() || 'ទូទៅ (General Supplier)',
       supplierPhone: supplierPhone.trim() || undefined,
       image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop&q=80'
     };
 
     onSave(newProd, addToOrderNow);
+    resetForm();
     onClose();
   };
 

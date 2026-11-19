@@ -14,7 +14,13 @@ export interface HealthStatus {
 export const api = {
   async checkHealth(): Promise<HealthStatus> {
     try {
-      const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(3000) });
+      // Safe cross-browser timeout (supports older iOS Safari & Android browsers)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`${API_BASE_URL}/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       if (!res.ok) throw new Error('Health check failed');
       const data = await res.json();
       return {

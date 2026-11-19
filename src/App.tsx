@@ -92,6 +92,19 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [loadDataFromDatabase]);
 
+  // Synchronize state with LocalStorage for offline resilience
+  useEffect(() => {
+    if (restockItems.length > 0) {
+      saveRestockItems(restockItems);
+    }
+  }, [restockItems]);
+
+  useEffect(() => {
+    if (products.length > 0) {
+      saveProducts(products);
+    }
+  }, [products]);
+
   // Handle Scanning Barcode (Used by both Barcode Gun & Camera Scanner & Manual Input)
   const handleScan = useCallback(async (scannedBarcode: string) => {
     const cleanBarcode = scannedBarcode.trim();
@@ -113,9 +126,15 @@ export const App: React.FC = () => {
             return;
           }
 
-          // Newly added item
+          // Newly added item: guard against duplicate keys in state
           sound.playSuccessBeep();
-          setRestockItems(prev => [item, ...prev]);
+          setRestockItems(prev => {
+            const exists = prev.some(i => i.id === item.id || i.product.id === item.product.id);
+            if (exists) {
+              return prev.map(i => (i.id === item.id || i.product.id === item.product.id) ? item : i);
+            }
+            return [item, ...prev];
+          });
           setHighlightedItemId(item.id);
           setTimeout(() => setHighlightedItemId(null), 2500);
           showToast(`✅ បានស្កេន «${item.product.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
@@ -246,7 +265,9 @@ export const App: React.FC = () => {
     showToast(`បានចុះឈ្មោះទំនិញ "${savedProd.name}" ចូលក្នុង PostgreSQL ជោគជ័យ`, 'success');
 
     if (addToOrderNow) {
-      handleScan(savedProd.barcode);
+      setTimeout(() => {
+        handleScan(savedProd.barcode);
+      }, 60);
     }
   };
 
