@@ -12,6 +12,11 @@ export const pool = new Pool({
   }
 });
 
+// Prevent unhandled error event from crashing the server on Neon idle client disconnects
+pool.on('error', (err) => {
+  console.warn('⚠️ Unexpected error on idle PostgreSQL client (auto-recovering):', err.message);
+});
+
 export const initDb = async () => {
   const client = await pool.connect();
   try {

@@ -14,66 +14,81 @@ export const pool = new Pool({
   }
 });
 
+// Prevent unhandled error event from crashing the server on Neon idle client disconnects
+pool.on('error', (err) => {
+  console.warn('⚠️ Unexpected error on idle PostgreSQL client (auto-recovering):', err.message);
+});
+
 let isDbInitialized = false;
+let dbInitPromise: Promise<void> | null = null;
 
 export const initDb = async () => {
   if (isDbInitialized) return;
-  const client = await pool.connect();
-  try {
-    // 1. Create products table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS products (
-        id VARCHAR(64) PRIMARY KEY,
-        barcode VARCHAR(128) UNIQUE NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        khmer_name VARCHAR(255),
-        category VARCHAR(128),
-        unit VARCHAR(64) DEFAULT 'កំប៉ុង',
-        cost_price NUMERIC(10, 2) DEFAULT 0.00,
-        selling_price NUMERIC(10, 2) DEFAULT 0.00,
-        current_stock INTEGER DEFAULT 0,
-        min_stock INTEGER DEFAULT 10,
-        supplier_name VARCHAR(255),
-        supplier_phone VARCHAR(64),
-        image TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+  if (dbInitPromise) return dbInitPromise;
 
-    // 2. Create restock_items table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS restock_items (
-        id VARCHAR(64) PRIMARY KEY,
-        product_id VARCHAR(64) REFERENCES products(id) ON DELETE CASCADE,
-        barcode VARCHAR(128) NOT NULL,
-        order_quantity INTEGER NOT NULL DEFAULT 0,
-        unit_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-        total_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-        scanned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        status VARCHAR(32) DEFAULT 'pending',
-        note TEXT
-      );
-    `);
+  dbInitPromise = (async () => {
+    let client;
+    try {
+      client = await pool.connect();
 
-    // 3. Create purchase_orders table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS purchase_orders (
-        id VARCHAR(64) PRIMARY KEY,
-        po_number VARCHAR(64) UNIQUE NOT NULL,
-        supplier_name VARCHAR(255),
-        total_amount NUMERIC(10, 2) DEFAULT 0.00,
-        status VARCHAR(32) DEFAULT 'draft',
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      // 1. Create products table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS products (
+          id VARCHAR(64) PRIMARY KEY,
+          barcode VARCHAR(128) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          khmer_name VARCHAR(255),
+          category VARCHAR(128),
+          unit VARCHAR(64) DEFAULT 'កំប៉ុង',
+          cost_price NUMERIC(10, 2) DEFAULT 0.00,
+          selling_price NUMERIC(10, 2) DEFAULT 0.00,
+          current_stock INTEGER DEFAULT 0,
+          min_stock INTEGER DEFAULT 10,
+          supplier_name VARCHAR(255),
+          supplier_phone VARCHAR(64),
+          image TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    isDbInitialized = true;
-  } catch (err) {
-    console.error('Database initialization error:', err);
-  } finally {
-    client.release();
-  }
+      // 2. Create restock_items table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS restock_items (
+          id VARCHAR(64) PRIMARY KEY,
+          product_id VARCHAR(64) REFERENCES products(id) ON DELETE CASCADE,
+          barcode VARCHAR(128) NOT NULL,
+          order_quantity INTEGER NOT NULL DEFAULT 0,
+          unit_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+          total_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+          scanned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          status VARCHAR(32) DEFAULT 'pending',
+          note TEXT
+        );
+      `);
+
+      // 3. Create purchase_orders table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+          id VARCHAR(64) PRIMARY KEY,
+          po_number VARCHAR(64) UNIQUE NOT NULL,
+          supplier_name VARCHAR(255),
+          total_amount NUMERIC(10, 2) DEFAULT 0.00,
+          status VARCHAR(32) DEFAULT 'draft',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      isDbInitialized = true;
+    } catch (err) {
+      console.error('Database initialization error:', err);
+    } finally {
+      if (client) client.release();
+      dbInitPromise = null;
+    }
+  })();
+
+  return dbInitPromise;
 };
 
 export const app = express();
@@ -177,7 +192,18 @@ app.post('/api/products', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Barcode and Name are required' });
     }
 
-    const id = `p-${Date.now()}`;
+    const cleanBarcode = String(barcode).trim();
+
+    // Check if barcode already exists (case-insensitive)
+    const existing = await pool.query('SELECT * FROM products WHERE LOWER(barcode) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ 
+        error: `Barcode "${cleanBarcode}" មានរួចហើយក្នុងប្រព័ន្ធ! (ឈ្មោះ: ${existing.rows[0].name})`,
+        product: mapProduct(existing.rows[0])
+      });
+    }
+
+    const id = `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const result = await pool.query(`
       INSERT INTO products (
         id, barcode, name, khmer_name, category, unit,
@@ -186,11 +212,11 @@ app.post('/api/products', async (req: Request, res: Response) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *;
     `, [
-      id, barcode.trim(), name.trim(), khmerName?.trim() || null,
+      id, cleanBarcode, name.trim(), khmerName?.trim() || null,
       category || 'ផ្សេងៗ (Other)', unit || 'កំប៉ុង',
-      parseFloat(costPrice) || 0, parseFloat(sellingPrice) || 0,
-      parseInt(currentStock, 10) || 0, parseInt(minStock, 10) || 10,
-      supplierName?.trim() || 'ទូទៅ', supplierPhone?.trim() || null,
+      Math.max(0, parseFloat(costPrice) || 0), Math.max(0, parseFloat(sellingPrice) || 0),
+      Math.max(0, parseInt(currentStock, 10) || 0), Math.max(0, parseInt(minStock, 10) || 10),
+      supplierName?.trim() || 'ទូទៅ (General Supplier)', supplierPhone?.trim() || null,
       image || null
     ]);
 
@@ -241,10 +267,10 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
     const prod = prodRes.rows[0];
     const costPrice = parseFloat(prod.cost_price) || 0;
 
-    // 2. Check if already in restock_items
+    // 2. Check if already in restock_items (by product_id or barcode)
     const existingRes = await pool.query(
-      'SELECT * FROM restock_items WHERE product_id = $1 LIMIT 1;',
-      [prod.id]
+      'SELECT * FROM restock_items WHERE product_id = $1 OR LOWER(barcode) = LOWER($2) LIMIT 1;',
+      [prod.id, cleanBarcode]
     );
 
     if (existingRes.rows.length > 0) {
@@ -268,8 +294,8 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
         item: mapRestockItem(itemRes.rows[0])
       });
     } else {
-      // Insert new item with initial order_quantity = 0 so Admin explicitly enters the number
-      const newId = `item-${Date.now()}`;
+      // Insert new item with initial order_quantity = 0 and collision-proof unique ID
+      const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const defaultQty = 0;
       const totalCost = 0;
 
