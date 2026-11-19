@@ -33,3 +33,6 @@ pnpm-debug.log*
 # Spreadsheets & Downloads
 *.xlsx
 *.csv
+
+.vercel
+.env*

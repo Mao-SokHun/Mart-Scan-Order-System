@@ -13,9 +13,9 @@ interface RestockOrderTableProps {
   onUpdateQuantity: (itemId: string, newQty: number) => void;
   onRemoveItem: (itemId: string) => void;
   onClearAll: () => void;
-  onExportExcel: (orderDay: OrderDay, supplierFilter?: string) => void;
-  onExportSimplePO?: (supplierFilter?: string) => void;
-  onCopyToTelegram: (orderDay: OrderDay, supplierFilter?: string) => void;
+  onExportExcel: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
+  onExportSimplePO?: (itemsToExport: RestockItem[], supplierFilter?: string) => void;
+  onCopyToTelegram: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
   onOpenPrintPO: () => void;
 }
 
@@ -61,7 +61,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
       );
       if (!confirm) return;
     }
-    onExportExcel(orderDay, supplierFilter);
+    onExportExcel(filteredItems, orderDay, supplierFilter);
   };
 
   const handleExportSimplePOWithValidation = () => {
@@ -72,7 +72,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
       if (!confirm) return;
     }
     if (onExportSimplePO) {
-      onExportSimplePO(supplierFilter);
+      onExportSimplePO(filteredItems, supplierFilter);
     }
   };
 
@@ -83,7 +83,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
       );
       if (!confirm) return;
     }
-    onCopyToTelegram(orderDay, supplierFilter);
+    onCopyToTelegram(filteredItems, orderDay, supplierFilter);
     setCopiedTelegram(true);
     setTimeout(() => setCopiedTelegram(false), 2000);
   };
@@ -375,6 +375,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                           placeholder="0"
                           value={item.orderQuantity === 0 ? '' : item.orderQuantity}
                           onFocus={(e) => e.target.select()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          }}
                           onChange={(e) => {
                             const val = e.target.value;
                             onUpdateQuantity(item.id, val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
@@ -580,6 +583,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                               placeholder="0"
                               value={item.orderQuantity === 0 ? '' : item.orderQuantity}
                               onFocus={(e) => e.target.select()}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              }}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 onUpdateQuantity(item.id, val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));

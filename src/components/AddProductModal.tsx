@@ -44,10 +44,15 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setBarcode(initialBarcode || '');
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onClose();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
     } else {
       resetForm();
     }
-  }, [isOpen, initialBarcode]);
+  }, [isOpen, initialBarcode, onClose]);
 
   if (!isOpen) return null;
 

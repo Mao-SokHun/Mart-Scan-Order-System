@@ -6,7 +6,7 @@ import {
   getStoredRestockItems, saveRestockItems 
 } from './utils/storage';
 import { 
-  exportToTakeoPlanExcel, 
+  exportDailyPlanExcel, 
   exportToSimplePOExcel, 
   copyToTelegramClipboard 
 } from './utils/export';
@@ -94,9 +94,7 @@ export const App: React.FC = () => {
 
   // Synchronize state with LocalStorage for offline resilience
   useEffect(() => {
-    if (restockItems.length > 0) {
-      saveRestockItems(restockItems);
-    }
+    saveRestockItems(restockItems);
   }, [restockItems]);
 
   useEffect(() => {
@@ -107,7 +105,7 @@ export const App: React.FC = () => {
 
   // Handle Scanning Barcode (Used by both Barcode Gun & Camera Scanner & Manual Input)
   const handleScan = useCallback(async (scannedBarcode: string) => {
-    const cleanBarcode = scannedBarcode.trim();
+    const cleanBarcode = scannedBarcode.replace(/[\r\n\t]/g, '').trim();
     if (!cleanBarcode) return;
 
     // If connected to Neon DB, perform scan through API
@@ -150,8 +148,8 @@ export const App: React.FC = () => {
       }
     }
 
-    // Local Fallback logic
-    const foundProduct = products.find(p => p.barcode === cleanBarcode);
+    // Local Fallback logic (case-insensitive)
+    const foundProduct = products.find(p => p.barcode.toLowerCase() === cleanBarcode.toLowerCase());
     if (foundProduct) {
       sound.playSuccessBeep();
       setRestockItems(prevItems => {
@@ -171,7 +169,7 @@ export const App: React.FC = () => {
             product: foundProduct,
             orderQuantity: defaultQty,
             scannedAt: new Date().toISOString(),
-            unitCost: foundProduct.costPrice,
+            unitCost: foundProduct.costPrice || 0,
             totalCost: 0
           };
           setHighlightedItemId(newItem.id);
@@ -204,7 +202,7 @@ export const App: React.FC = () => {
         return {
           ...item,
           orderQuantity: newQty,
-          totalCost: newQty * item.unitCost
+          totalCost: newQty * (item.unitCost || 0)
         };
       }
       return item;
@@ -392,16 +390,16 @@ export const App: React.FC = () => {
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={handleRemoveItem}
           onClearAll={handleClearAll}
-          onExportExcel={(day, filter) => exportToTakeoPlanExcel(restockItems, day, filter)}
-          onExportSimplePO={(filter) => exportToSimplePOExcel(restockItems, filter)}
-          onCopyToTelegram={(day, filter) => copyToTelegramClipboard(restockItems, day, filter)}
+          onExportExcel={(itemsToExport, day, filter) => exportDailyPlanExcel(itemsToExport, day, filter)}
+          onExportSimplePO={(itemsToExport, filter) => exportToSimplePOExcel(itemsToExport, filter)}
+          onCopyToTelegram={(itemsToExport, day, filter) => copyToTelegramClipboard(itemsToExport, day, filter)}
           onOpenPrintPO={() => setIsPrintPOOpen(true)}
         />
       </main>
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 animate-bounce print:hidden">
           <div className={`px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-2.5 text-xs font-semibold ${
             toast.type === 'success' 
               ? 'bg-slate-900 text-white border-slate-800' 
@@ -454,7 +452,7 @@ export const App: React.FC = () => {
       />
 
       {/* Mobile Sticky Bottom Bar (Thumb-friendly scanner and order total) */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-2.5 flex items-center justify-between z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+      <div className="md:hidden print:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-2.5 flex items-center justify-between z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
         <div className="min-w-0 pr-2">
           <span className="text-[10px] text-slate-500 block font-medium truncate">
             សរុប {restockItems.length} មុខ • {restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} ឯកតា

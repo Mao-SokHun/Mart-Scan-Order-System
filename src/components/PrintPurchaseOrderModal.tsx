@@ -18,6 +18,15 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
   const [martPhone, setMartPhone] = useState('012 888 999 / 098 777 666');
   const [martAddress, setMartAddress] = useState('រាជធានីភ្នំពេញ, កម្ពុជា');
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const orderableItems = items.filter(i => i.orderQuantity > 0);

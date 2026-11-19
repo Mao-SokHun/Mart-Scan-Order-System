@@ -154,7 +154,7 @@ app.get('/api/products', async (_req: Request, res: Response) => {
 app.get('/api/products/barcode/:barcode', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.params;
-    const result = await pool.query('SELECT * FROM products WHERE barcode = $1 LIMIT 1;', [barcode.trim()]);
+    const result = await pool.query('SELECT * FROM products WHERE LOWER(barcode) = LOWER($1) LIMIT 1;', [barcode.trim()]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found', barcode });
     }
@@ -232,8 +232,8 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
 
     const cleanBarcode = barcode.trim();
 
-    // 1. Find product
-    const prodRes = await pool.query('SELECT * FROM products WHERE barcode = $1 LIMIT 1;', [cleanBarcode]);
+    // 1. Find product (case-insensitive for barcode matching)
+    const prodRes = await pool.query('SELECT * FROM products WHERE LOWER(barcode) = LOWER($1) LIMIT 1;', [cleanBarcode]);
     if (prodRes.rows.length === 0) {
       return res.status(404).json({ found: false, barcode: cleanBarcode, message: 'Barcode not found in catalog' });
     }

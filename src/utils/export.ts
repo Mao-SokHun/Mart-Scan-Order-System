@@ -130,8 +130,8 @@ export const exportDailyPlanExcel = (
       'Fri': orderDay === 'Fri' ? item.orderQuantity : '',
       'Sat': orderDay === 'Sat' ? item.orderQuantity : '',
       'Sun': orderDay === 'Sun' ? item.orderQuantity : '',
-      'តម្លៃដើមឯកតា (Unit Cost)': `$${item.unitCost.toFixed(2)}`,
-      'សរុបទឹកប្រាក់ (Total Cost)': `$${item.totalCost.toFixed(2)}`,
+      'តម្លៃដើមឯកតា (Unit Cost)': `$${(item.unitCost || 0).toFixed(2)}`,
+      'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
       'Remark': remark
     };
 
@@ -171,8 +171,8 @@ export const exportDailyPlanExcel = (
       'អ្នកផ្គត់ផ្គង់ (Vendor)': vendor,
       'ឯកតា (Unit)': item.product.unit || 'Units',
       'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity,
-      'តម្លៃដើមឯកតា (Unit Cost)': `$${item.unitCost.toFixed(2)}`,
-      'សរុបទឹកប្រាក់ (Total Cost)': `$${item.totalCost.toFixed(2)}`,
+      'តម្លៃដើមឯកតា (Unit Cost)': `$${(item.unitCost || 0).toFixed(2)}`,
+      'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
       'ថ្ងៃកុម្ម៉ង់ (Order Day)': orderDay,
       'Remark': remark
     };
@@ -288,16 +288,16 @@ export const exportToSimplePOExcel = (items: RestockItem[], supplierFilter?: str
     'ប្រភេទ (Category)': item.product.category,
     'ឯកតា (Unit)': item.product.unit,
     'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity,
-    'តម្លៃដើមឯកតា (Unit Cost)': `$${item.unitCost.toFixed(2)}`,
-    'សរុបទឹកប្រាក់ (Total Cost)': `$${item.totalCost.toFixed(2)}`,
+    'តម្លៃដើមឯកតា (Unit Cost)': `$${(item.unitCost || 0).toFixed(2)}`,
+    'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
     'អ្នកផ្គត់ផ្គង់ (Supplier)': item.product.supplierName,
     'លេខទូរស័ព្ទ (Phone)': item.product.supplierPhone || '',
     'ម៉ោងស្កេន (Scanned At)': new Date(item.scannedAt).toLocaleString('km-KH')
   }));
 
   // Add Grand Total row
-  const totalQty = filteredItems.reduce((acc, curr) => acc + curr.orderQuantity, 0);
-  const totalCost = filteredItems.reduce((acc, curr) => acc + curr.totalCost, 0);
+  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
+  const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
   rows.push({
     'ល.រ (No.)': '' as any,
     'បារកូដ (Barcode)': '',

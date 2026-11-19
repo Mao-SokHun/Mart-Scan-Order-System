@@ -138,12 +138,14 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       const config = {
         fps: 20, // 20 frames per second for fluid scanning
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          // Optimized rectangular scan box matching standard retail barcodes
-          const width = Math.min(Math.floor(viewfinderWidth * 0.88), 350);
-          const height = Math.min(Math.floor(viewfinderHeight * 0.42), 170);
+          // Optimized rectangular scan box that never exceeds viewfinder
+          const maxW = Math.max(160, viewfinderWidth - 20);
+          const maxH = Math.max(90, viewfinderHeight - 20);
+          const idealW = Math.min(Math.floor(viewfinderWidth * 0.88), 350);
+          const idealH = Math.min(Math.floor(viewfinderHeight * 0.42), 170);
           return {
-            width: Math.max(240, width),
-            height: Math.max(120, height)
+            width: Math.min(idealW, maxW),
+            height: Math.min(idealH, maxH)
           };
         },
         disableFlip: false
@@ -239,17 +241,26 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     }
   }, [handleBarcodeDecoded, stopScanner]);
 
-  // Initial load when modal opens
+  // Initial load when modal opens & Escape key listener
   useEffect(() => {
     if (isOpen) {
       startScanner();
     } else {
       stopScanner();
     }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
+      window.removeEventListener('keydown', handleKeyDown);
       stopScanner();
     };
-  }, [isOpen, startScanner, stopScanner]);
+  }, [isOpen, startScanner, stopScanner, onClose]);
 
   // Toggle torch / flashlight
   const toggleTorch = async () => {
