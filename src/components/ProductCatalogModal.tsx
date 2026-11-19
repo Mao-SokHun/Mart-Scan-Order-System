@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
-import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check } from 'lucide-react';
+import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check, FileSpreadsheet } from 'lucide-react';
 
 interface ProductCatalogModalProps {
   isOpen: boolean;
   onClose: () => void;
   products: Product[];
   onOpenAddNew: () => void;
+  onOpenImportExcel?: () => void;
   onAddToOrder: (product: Product) => void;
   onResetDemoData: () => void;
 }
@@ -16,6 +17,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   onClose,
   products,
   onOpenAddNew,
+  onOpenImportExcel,
   onAddToOrder,
   onResetDemoData
 }) => {
@@ -71,6 +73,16 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {onOpenImportExcel && (
+              <button
+                onClick={onOpenImportExcel}
+                className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-2xs active:scale-95"
+                title="នាំចូលទំនិញរាប់រយមុខពី Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Import Excel</span>
+              </button>
+            )}
             <button
               onClick={onOpenAddNew}
               className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-2xs active:scale-95"

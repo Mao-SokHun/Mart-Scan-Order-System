@@ -19,13 +19,14 @@ import { RestockOrderTable } from './components/RestockOrderTable';
 import { AddProductModal } from './components/AddProductModal';
 import { ProductCatalogModal } from './components/ProductCatalogModal';
 import { PrintPurchaseOrderModal } from './components/PrintPurchaseOrderModal';
+import { ImportProductsModal } from './components/ImportProductsModal';
 import { BarcodeCardTester } from './components/BarcodeCardTester';
 import { INITIAL_PRODUCTS } from './data/mockProducts';
 
 import { 
   Store, Camera, Package, Plus, Sparkles, 
   CheckCircle, AlertCircle, ShoppingBag, 
-  ChevronDown, ChevronUp, Bell, Database, RefreshCw 
+  ChevronDown, ChevronUp, Bell, Database, RefreshCw, FileSpreadsheet 
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -39,6 +40,7 @@ export const App: React.FC = () => {
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isPrintPOOpen, setIsPrintPOOpen] = useState(false);
+  const [isImportExcelOpen, setIsImportExcelOpen] = useState(false);
   const [notFoundBarcode, setNotFoundBarcode] = useState<string>('');
   const [showTestSheet, setShowTestSheet] = useState(true);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
@@ -206,7 +208,7 @@ export const App: React.FC = () => {
   // Global listener for USB/Bluetooth Barcode Scanner Guns
   useBarcodeGun({
     onScan: handleScan,
-    enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen
+    enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen && !isImportExcelOpen
   });
 
   // Quantity updater
@@ -356,6 +358,15 @@ export const App: React.FC = () => {
           {/* Action Toolbar */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
+              onClick={() => setIsImportExcelOpen(true)}
+              className="p-2 sm:px-3 sm:py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shadow-2xs"
+              title="នាំចូលទំនិញរាប់រយមុខពី Excel"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline">Import Excel</span>
+            </button>
+
+            <button
               onClick={() => setIsCatalogOpen(true)}
               className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
               title="មើលបញ្ជីទំនិញទាំងអស់"
@@ -496,8 +507,24 @@ export const App: React.FC = () => {
           setNotFoundBarcode('');
           setIsAddProductOpen(true);
         }}
+        onOpenImportExcel={() => {
+          setIsCatalogOpen(false);
+          setIsImportExcelOpen(true);
+        }}
         onAddToOrder={(product) => handleScan(product.barcode)}
         onResetDemoData={handleResetDemoData}
+      />
+
+      {/* Import Products from Excel Modal */}
+      <ImportProductsModal
+        isOpen={isImportExcelOpen}
+        onClose={() => setIsImportExcelOpen(false)}
+        existingProducts={products}
+        onImportSuccess={(updatedList) => {
+          setProducts(updatedList);
+          saveProducts(updatedList);
+          showToast(`បាន Import ទំនិញចូលប្រព័ន្ធជោគជ័យ! សរុប ${updatedList.length} មុខ`, 'success');
+        }}
       />
 
       {/* Print Purchase Order Modal */}
