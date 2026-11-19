@@ -355,6 +355,8 @@ export const copyToTelegramClipboard = async (
     ? items.filter(i => i.product.supplierName === supplierFilter)
     : items;
 
+  if (filteredItems.length === 0) return false;
+
   const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   let dateStr = '';

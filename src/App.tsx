@@ -50,10 +50,12 @@ export const App: React.FC = () => {
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const toastTimerRef = React.useRef<number | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, type });
-    setTimeout(() => {
+    toastTimerRef.current = window.setTimeout(() => {
       setToast(null);
     }, 3000);
   };
@@ -211,13 +213,13 @@ export const App: React.FC = () => {
   const handleUpdateQuantity = async (itemId: string, newQty: number) => {
     if (newQty < 0) return;
 
-    // Optimistic local update
+    // Optimistic local update with safe 2-decimal rounding
     setRestockItems(prev => prev.map(item => {
-      if (item.id === itemId) {
+      if (item.id === itemId || item.product.id === itemId) {
         return {
           ...item,
           orderQuantity: newQty,
-          totalCost: newQty * (item.unitCost || 0)
+          totalCost: Math.round(newQty * (item.unitCost || 0) * 100) / 100
         };
       }
       return item;
@@ -234,7 +236,7 @@ export const App: React.FC = () => {
 
   // Remove single item
   const handleRemoveItem = async (itemId: string) => {
-    setRestockItems(prev => prev.filter(i => i.id !== itemId));
+    setRestockItems(prev => prev.filter(i => i.id !== itemId && i.product.id !== itemId));
     showToast('បានលុបទំនិញចេញពីតារាង', 'info');
 
     if (dbStatus.connected) {
@@ -271,6 +273,13 @@ export const App: React.FC = () => {
         savedProd = await api.createProduct(newProduct);
       } catch (err: any) {
         showToast(`បរាជ័យក្នុងការរក្សាទុកក្នុង DB: ${err.message}`, 'error');
+        return; // Halt if DB rejected (e.g. duplicate barcode)
+      }
+    } else {
+      const existsLocally = products.some(p => p.barcode.toLowerCase() === newProduct.barcode.toLowerCase());
+      if (existsLocally) {
+        showToast(`Barcode "${newProduct.barcode}" មានរួចហើយក្នុងប្រព័ន្ធ!`, 'error');
+        return;
       }
     }
 
@@ -425,9 +434,21 @@ export const App: React.FC = () => {
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={handleRemoveItem}
           onClearAll={handleClearAll}
-          onExportExcel={(itemsToExport, day, filter) => exportDailyPlanExcel(itemsToExport, day, filter)}
-          onExportSimplePO={(itemsToExport, filter) => exportToSimplePOExcel(itemsToExport, filter)}
-          onCopyToTelegram={(itemsToExport, day, filter) => copyToTelegramClipboard(itemsToExport, day, filter)}
+          onExportExcel={(itemsToExport, day, filter) => {
+            const ok = exportDailyPlanExcel(itemsToExport, day, filter);
+            if (ok) showToast(`បានទាញយក Daily Plan (${day}) ជា Excel រួចរាល់`, 'success');
+            return ok;
+          }}
+          onExportSimplePO={(itemsToExport, filter) => {
+            const ok = exportToSimplePOExcel(itemsToExport, filter);
+            if (ok) showToast('បានទាញយកបញ្ជីកុម្ម៉ង់ PO ជា Excel រួចរាល់', 'success');
+            return ok;
+          }}
+          onCopyToTelegram={async (itemsToExport, day, filter) => {
+            const ok = await copyToTelegramClipboard(itemsToExport, day, filter);
+            if (ok) showToast('បានចម្លងអត្ថបទសម្រាប់ Telegram រួចរាល់!', 'success');
+            return ok;
+          }}
           onOpenPrintPO={() => setIsPrintPOOpen(true)}
         />
       </main>

@@ -29,6 +29,8 @@ export const useBarcodeGun = ({
   const bufferRef = useRef<string>('');
   const lastKeyTimeRef = useRef<number>(0);
   const timerRef = useRef<number | null>(null);
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
 
   useEffect(() => {
     if (!enabled) return;
@@ -39,7 +41,7 @@ export const useBarcodeGun = ({
         setLastScanned(code);
         setIsReceivingGunInput(false);
         bufferRef.current = '';
-        onScan(code);
+        onScanRef.current(code);
       } else {
         bufferRef.current = '';
         setIsReceivingGunInput(false);
@@ -114,7 +116,7 @@ export const useBarcodeGun = ({
       window.removeEventListener('keydown', handleKeyDown, true);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [enabled, minChars, maxDelayMs, onScan]);
+  }, [enabled, minChars, maxDelayMs]);
 
   return {
     lastScanned,

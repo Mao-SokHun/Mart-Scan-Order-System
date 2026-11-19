@@ -11,7 +11,10 @@ export const getStoredProducts = (): Product[] => {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Error reading products from storage:', e);
@@ -33,7 +36,10 @@ export const getStoredRestockItems = (): RestockItem[] => {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.RESTOCK_ITEMS);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Error reading restock items:', e);

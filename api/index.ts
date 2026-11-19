@@ -378,7 +378,8 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 app.get('/api/products', async (req: Request, res: Response) => {
   try {
     const search = req.query.search || req.query.q;
-    const limit = Math.min(1000, Math.max(1, safeInt(req.query.limit, 500)));
+    const hasLimit = req.query.limit !== undefined;
+    const limit = hasLimit ? Math.min(5000, Math.max(1, safeInt(req.query.limit, 1000))) : 5000;
     const offset = Math.max(0, safeInt(req.query.offset, 0));
 
     let result;
@@ -521,7 +522,21 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 6. POST /api/products/batch - Bulk catalog import
+// 6. DELETE product from catalog
+app.delete('/api/products/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM products WHERE id = $1 OR LOWER(TRIM(barcode)) = LOWER(TRIM($1)) RETURNING id;', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json({ success: true, deletedId: id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. POST /api/products/batch - Bulk catalog import
 app.post('/api/products/batch', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {

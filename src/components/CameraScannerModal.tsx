@@ -27,6 +27,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
+  const toastTimerRef = useRef<number | null>(null);
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
   const readerElementId = 'camera-barcode-reader';
@@ -53,7 +54,8 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     lastScannedCodeRef.current = cleanCode;
     lastScannedTimeRef.current = now;
     setLastScannedCode(cleanCode);
-    setTimeout(() => setLastScannedCode(null), 2500);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setLastScannedCode(null), 2500);
     setScanCount(prev => prev + 1);
 
     // Call onScan (handleScan will play beep and show toast)
@@ -270,6 +272,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       stopScanner();
     };
   }, [isOpen, startScanner, stopScanner, onClose]);
