@@ -217,7 +217,7 @@ export const initDb = async () => {
       await client.query(`
         CREATE TABLE IF NOT EXISTS restock_items (
           id VARCHAR(64) PRIMARY KEY,
-          product_id VARCHAR(64) REFERENCES products(id) ON DELETE CASCADE,
+          product_id VARCHAR(64) UNIQUE REFERENCES products(id) ON DELETE CASCADE,
           barcode VARCHAR(128) NOT NULL,
           order_quantity INTEGER NOT NULL DEFAULT 0,
           unit_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
@@ -226,6 +226,17 @@ export const initDb = async () => {
           status VARCHAR(32) DEFAULT 'pending',
           note TEXT
         );
+      `);
+
+      // Deduplicate restock_items if any duplicate product_id rows exist from older versions
+      await client.query(`
+        DELETE FROM restock_items a USING restock_items b
+        WHERE a.ctid < b.ctid AND a.product_id = b.product_id;
+      `);
+
+      // Ensure UNIQUE constraint index exists on product_id
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_restock_items_product_id ON restock_items (product_id);
       `);
 
       // 3. Create purchase_orders table
@@ -294,6 +305,11 @@ const safeInt = (val: any, fallback = 0): number => {
   return isNaN(parsed) ? fallback : parsed;
 };
 
+// Helper to safely round numeric totals to 2 decimal places
+const roundMoney = (val: number): number => {
+  return Math.round(val * 100) / 100;
+};
+
 // Helper to map DB snake_case product row to frontend Product type
 const mapProduct = (row: any) => ({
   id: String(row.product_id || row.id || ''),
@@ -320,7 +336,7 @@ const mapRestockItem = (row: any) => ({
   orderQuantity: safeInt(row.order_quantity, 0),
   scannedAt: row.scanned_at || new Date().toISOString(),
   unitCost: safeFloat(row.unit_cost, 0),
-  totalCost: safeFloat(row.total_cost, 0),
+  totalCost: roundMoney(safeFloat(row.total_cost, 0)),
   status: row.status || 'pending',
   note: row.note || undefined
 });
@@ -358,10 +374,13 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   }
 });
 
-// 2. GET all products (with optional search query: ?search=... or ?q=...)
+// 2. GET all products (with optional search query: ?search=... or ?q=..., limit, offset)
 app.get('/api/products', async (req: Request, res: Response) => {
   try {
     const search = req.query.search || req.query.q;
+    const limit = Math.min(1000, Math.max(1, safeInt(req.query.limit, 500)));
+    const offset = Math.max(0, safeInt(req.query.offset, 0));
+
     let result;
     if (search && typeof search === 'string' && search.trim()) {
       const q = `%${search.trim().toLowerCase()}%`;
@@ -370,10 +389,11 @@ app.get('/api/products', async (req: Request, res: Response) => {
         WHERE LOWER(barcode) LIKE $1 
            OR LOWER(name) LIKE $1 
            OR LOWER(COALESCE(khmer_name, '')) LIKE $1
-        ORDER BY name ASC;
-      `, [q]);
+        ORDER BY name ASC
+        LIMIT $2 OFFSET $3;
+      `, [q, limit, offset]);
     } else {
-      result = await pool.query('SELECT * FROM products ORDER BY name ASC;');
+      result = await pool.query('SELECT * FROM products ORDER BY name ASC LIMIT $1 OFFSET $2;', [limit, offset]);
     }
     res.json(result.rows.map(mapProduct));
   } catch (err: any) {
@@ -449,7 +469,109 @@ app.post('/api/products', async (req: Request, res: Response) => {
   }
 });
 
-// 5. GET current restock items
+// 5. PUT update existing product
+app.put('/api/products/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      name, khmerName, category, unit,
+      costPrice, sellingPrice, currentStock, minStock,
+      supplierName, supplierPhone, image
+    } = req.body || {};
+
+    const existing = await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1;', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const result = await pool.query(`
+      UPDATE products
+      SET name = COALESCE($1, name),
+          khmer_name = COALESCE($2, khmer_name),
+          category = COALESCE($3, category),
+          unit = COALESCE($4, unit),
+          cost_price = COALESCE($5, cost_price),
+          selling_price = COALESCE($6, selling_price),
+          current_stock = COALESCE($7, current_stock),
+          min_stock = COALESCE($8, min_stock),
+          supplier_name = COALESCE($9, supplier_name),
+          supplier_phone = COALESCE($10, supplier_phone),
+          image = COALESCE($11, image),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $12
+      RETURNING *;
+    `, [
+      name ? String(name).trim() : null,
+      khmerName !== undefined ? (khmerName ? String(khmerName).trim() : null) : null,
+      category ? String(category).trim() : null,
+      unit ? String(unit).trim() : null,
+      costPrice !== undefined ? Math.max(0, safeFloat(costPrice, 0)) : null,
+      sellingPrice !== undefined ? Math.max(0, safeFloat(sellingPrice, 0)) : null,
+      currentStock !== undefined ? Math.max(0, safeInt(currentStock, 0)) : null,
+      minStock !== undefined ? Math.max(0, safeInt(minStock, 10)) : null,
+      supplierName ? String(supplierName).trim() : null,
+      supplierPhone !== undefined ? (supplierPhone ? String(supplierPhone).trim() : null) : null,
+      image !== undefined ? (image || null) : null,
+      id
+    ]);
+
+    res.json(mapProduct(result.rows[0]));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. POST /api/products/batch - Bulk catalog import
+app.post('/api/products/batch', async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { products: items } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Array of products is required' });
+    }
+
+    await client.query('BEGIN');
+    let insertedCount = 0;
+    for (const p of items) {
+      if (!p.barcode || !p.name) continue;
+      const cleanBarcode = String(p.barcode).trim();
+      const id = p.id || `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      await client.query(`
+        INSERT INTO products (
+          id, barcode, name, khmer_name, category, unit,
+          cost_price, selling_price, current_stock, min_stock,
+          supplier_name, supplier_phone, image
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (barcode) DO UPDATE SET
+          name = EXCLUDED.name,
+          khmer_name = COALESCE(EXCLUDED.khmer_name, products.khmer_name),
+          category = COALESCE(EXCLUDED.category, products.category),
+          unit = COALESCE(EXCLUDED.unit, products.unit),
+          cost_price = EXCLUDED.cost_price,
+          selling_price = EXCLUDED.selling_price,
+          supplier_name = COALESCE(EXCLUDED.supplier_name, products.supplier_name),
+          updated_at = CURRENT_TIMESTAMP;
+      `, [
+        id, cleanBarcode, String(p.name).trim(), p.khmerName ? String(p.khmerName).trim() : null,
+        p.category ? String(p.category).trim() : 'ផ្សេងៗ (Other)', p.unit ? String(p.unit).trim() : 'កំប៉ុង',
+        Math.max(0, safeFloat(p.costPrice, 0)), Math.max(0, safeFloat(p.sellingPrice, 0)),
+        Math.max(0, safeInt(p.currentStock, 0)), Math.max(0, safeInt(p.minStock, 10)),
+        p.supplierName ? String(p.supplierName).trim() : 'ទូទៅ (General Supplier)', p.supplierPhone ? String(p.supplierPhone).trim() : null,
+        p.image || null
+      ]);
+      insertedCount++;
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, count: insertedCount });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 7. GET current restock items
 app.get('/api/restock', async (_req: Request, res: Response) => {
   try {
     const query = `
@@ -470,7 +592,7 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
   }
 });
 
-// 6. POST /api/restock/scan - CORE SCAN ENDPOINT
+// 8. POST /api/restock/scan - CORE SCAN ENDPOINT (Race-condition safe with ON CONFLICT)
 app.post('/api/restock/scan', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.body || {};
@@ -489,9 +611,9 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
     const prod = prodRes.rows[0];
     const costPrice = safeFloat(prod.cost_price, 0);
 
-    // 2. Check if already in restock_items (by product_id or barcode)
+    // 2. Check if already in restock_items
     const existingRes = await pool.query(
-      'SELECT * FROM restock_items WHERE product_id = $1 OR LOWER(TRIM(barcode)) = LOWER($2) LIMIT 1;',
+      'SELECT id FROM restock_items WHERE product_id = $1 OR LOWER(TRIM(barcode)) = LOWER($2) LIMIT 1;',
       [prod.id, cleanBarcode]
     );
 
@@ -515,47 +637,55 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
         message: 'ទំនិញនេះមានក្នុងតារាងរួចហើយ (មិនបូកស្ទួនចំនួនទេ)',
         item: mapRestockItem(itemRes.rows[0])
       });
-    } else {
-      // Insert new item with initial order_quantity = 0 and collision-proof unique ID
-      const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      const defaultQty = 0;
-      const totalCost = 0;
-
-      await pool.query(`
-        INSERT INTO restock_items (
-          id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);
-      `, [newId, prod.id, prod.barcode, defaultQty, costPrice, totalCost]);
-
-      const itemRes = await pool.query(`
-        SELECT 
-          r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
-          p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
-          p.cost_price, p.selling_price, p.current_stock, p.min_stock,
-          p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
-        FROM restock_items r
-        JOIN products p ON r.product_id = p.id
-        WHERE r.id = $1;
-      `, [newId]);
-
-      return res.json({
-        found: true,
-        action: 'added',
-        message: 'បានបញ្ចូលក្នុងតារាង! រង់ចាំ Admin វាយចំនួន',
-        item: mapRestockItem(itemRes.rows[0])
-      });
     }
+
+    // Insert new item with collision-proof unique ID and ON CONFLICT (product_id) DO NOTHING
+    const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const defaultQty = 0;
+    const totalCost = 0;
+
+    const insertRes = await pool.query(`
+      INSERT INTO restock_items (
+        id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+      ON CONFLICT (product_id) DO NOTHING
+      RETURNING id;
+    `, [newId, prod.id, prod.barcode, defaultQty, costPrice, totalCost]);
+
+    const finalId = insertRes.rows.length > 0 ? insertRes.rows[0].id : (
+      (await pool.query('SELECT id FROM restock_items WHERE product_id = $1;', [prod.id])).rows[0].id
+    );
+
+    const isNewlyAdded = insertRes.rows.length > 0;
+
+    const itemRes = await pool.query(`
+      SELECT 
+        r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
+        p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
+        p.cost_price, p.selling_price, p.current_stock, p.min_stock,
+        p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
+      FROM restock_items r
+      JOIN products p ON r.product_id = p.id
+      WHERE r.id = $1;
+    `, [finalId]);
+
+    return res.json({
+      found: true,
+      action: isNewlyAdded ? 'added' : 'already_exists',
+      message: isNewlyAdded ? 'បានបញ្ចូលក្នុងតារាង! រង់ចាំ Admin វាយចំនួន' : 'ទំនិញនេះមានក្នុងតារាងរួចហើយ (មិនបូកស្ទួនចំនួនទេ)',
+      item: mapRestockItem(itemRes.rows[0])
+    });
   } catch (err: any) {
     console.error('Error during scan:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// 7. PUT update quantity of restock item (supports update by item ID or product ID, with auto-upsert)
+// 9. PUT update quantity and note of restock item (supports update by item ID or product ID, with auto-upsert)
 app.put('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { orderQuantity } = req.body || {};
+    const { orderQuantity, note, status } = req.body || {};
     const qty = Math.max(0, safeInt(orderQuantity, 0));
 
     // Check if restock item exists by ID or product_id
@@ -573,45 +703,111 @@ app.put('/api/restock/:id', async (req: Request, res: Response) => {
       if (prodCheck.rows.length > 0) {
         const prod = prodCheck.rows[0];
         const unitCost = safeFloat(prod.cost_price, 0);
-        const totalCost = qty * unitCost;
+        const totalCost = roundMoney(qty * unitCost);
         const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         await pool.query(`
-          INSERT INTO restock_items (id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at)
-          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);
-        `, [newId, prod.id, prod.barcode, qty, unitCost, totalCost]);
-        return res.json({ success: true, id: newId, orderQuantity: qty, totalCost });
+          INSERT INTO restock_items (id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at, note, status)
+          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8)
+          ON CONFLICT (product_id) DO UPDATE SET
+            order_quantity = EXCLUDED.order_quantity,
+            total_cost = EXCLUDED.total_cost,
+            note = COALESCE(EXCLUDED.note, restock_items.note),
+            status = COALESCE(EXCLUDED.status, restock_items.status);
+        `, [newId, prod.id, prod.barcode, qty, unitCost, totalCost, note || null, status || 'pending']);
+        return res.json({ success: true, id: newId, orderQuantity: qty, totalCost, note, status });
       }
       return res.status(404).json({ error: 'Item not found' });
     }
 
     const row = check.rows[0];
     const unitCost = safeFloat(row.unit_cost, 0);
-    const totalCost = qty * unitCost;
+    const totalCost = roundMoney(qty * unitCost);
 
     await pool.query(`
       UPDATE restock_items
-      SET order_quantity = $1, total_cost = $2
+      SET order_quantity = $1, total_cost = $2,
+          note = COALESCE($4, note),
+          status = COALESCE($5, status)
       WHERE id = $3;
-    `, [qty, totalCost, row.id]);
+    `, [qty, totalCost, row.id, note !== undefined ? note : null, status !== undefined ? status : null]);
 
-    res.json({ success: true, id: row.id, orderQuantity: qty, totalCost });
+    res.json({ success: true, id: row.id, orderQuantity: qty, totalCost, note, status });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 8. DELETE single item from restock list (supports deletion by item ID or product ID)
+// 10. POST /api/restock/batch - Sync batch restock items (used for offline synchronization)
+app.post('/api/restock/batch', async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Array of restock items is required' });
+    }
+
+    await client.query('BEGIN');
+    let syncedCount = 0;
+    for (const item of items) {
+      const barcode = item.product?.barcode || item.barcode;
+      if (!barcode) continue;
+      const cleanBarcode = String(barcode).trim();
+
+      const pRes = await client.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+      if (pRes.rows.length === 0) continue;
+      const prod = pRes.rows[0];
+
+      const qty = Math.max(0, safeInt(item.orderQuantity, 0));
+      const unitCost = safeFloat(prod.cost_price, 0);
+      const totalCost = roundMoney(qty * unitCost);
+      const id = item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+      await client.query(`
+        INSERT INTO restock_items (
+          id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at, note, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8)
+        ON CONFLICT (product_id) DO UPDATE SET
+          order_quantity = GREATEST(restock_items.order_quantity, EXCLUDED.order_quantity),
+          total_cost = GREATEST(restock_items.order_quantity, EXCLUDED.order_quantity) * EXCLUDED.unit_cost,
+          note = COALESCE(EXCLUDED.note, restock_items.note),
+          status = COALESCE(EXCLUDED.status, restock_items.status);
+      `, [id, prod.id, prod.barcode, qty, unitCost, totalCost, item.note || null, item.status || 'pending']);
+      syncedCount++;
+    }
+    await client.query('COMMIT');
+
+    const allRes = await client.query(`
+      SELECT 
+        r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
+        p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
+        p.cost_price, p.selling_price, p.current_stock, p.min_stock,
+        p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
+      FROM restock_items r
+      JOIN products p ON r.product_id = p.id
+      ORDER BY r.scanned_at DESC;
+    `);
+
+    res.json({ success: true, count: syncedCount, items: allRes.rows.map(mapRestockItem) });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 11. DELETE single item from restock list (supports deletion by item ID, product ID, or barcode)
 app.delete('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM restock_items WHERE id = $1 OR product_id = $1;', [id]);
+    await pool.query('DELETE FROM restock_items WHERE id = $1 OR product_id = $1 OR LOWER(TRIM(barcode)) = LOWER(TRIM($1));', [id]);
     res.json({ success: true, deletedId: id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 9. DELETE clear all restock items
+// 12. DELETE clear all restock items
 app.delete('/api/restock', async (_req: Request, res: Response) => {
   try {
     await pool.query('DELETE FROM restock_items;');

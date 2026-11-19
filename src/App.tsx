@@ -80,11 +80,16 @@ export const App: React.FC = () => {
             return dbRestock;
           }
           const merged = [...dbRestock];
+          const unSynced: RestockItem[] = [];
           for (const localItem of prevLocal) {
             const exists = merged.some(m => m.product.id === localItem.product.id || m.id === localItem.id);
             if (!exists) {
               merged.push(localItem);
+              unSynced.push(localItem);
             }
+          }
+          if (unSynced.length > 0) {
+            api.syncBatchRestockItems(unSynced).catch(e => console.warn('Sync offline restock items error:', e));
           }
           saveRestockItems(merged);
           return merged;

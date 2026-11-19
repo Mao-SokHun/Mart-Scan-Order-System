@@ -108,5 +108,25 @@ export const api = {
       method: 'DELETE'
     });
     return res.ok;
+  },
+
+  async syncBatchRestockItems(items: RestockItem[]): Promise<{ count: number; items: RestockItem[] }> {
+    const res = await fetch(`${API_BASE_URL}/restock/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
+    if (!res.ok) throw new Error('Failed to batch sync restock items');
+    return res.json();
+  },
+
+  async createProductsBatch(products: Partial<Product>[]): Promise<{ count: number }> {
+    const res = await fetch(`${API_BASE_URL}/products/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products })
+    });
+    if (!res.ok) throw new Error('Failed to batch import products');
+    return res.json();
   }
 };
