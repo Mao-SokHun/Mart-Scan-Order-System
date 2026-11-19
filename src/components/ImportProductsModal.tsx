@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product } from '../types';
+import { saveProducts } from '../utils/storage';
 import { 
   X, UploadCloud, FileSpreadsheet, CheckCircle2, 
   AlertCircle, ArrowRight, Download, RefreshCw, Package 
@@ -103,7 +104,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             row['កូដទំនិញ'] || row['បារកូដ'] || row['Code'] || row['code'] || 
             row['UPC'] || row['EAN'] || row['កូដ'] || '';
 
-          const barcode = String(rawBarcode).trim();
+          let barcode = String(rawBarcode).trim();
+          if (barcode.endsWith('.0')) barcode = barcode.slice(0, -2);
           if (!barcode) continue;
 
           // 2. Detect Product Name
@@ -343,11 +345,70 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
       const prodsRes = await fetch('/api/products');
       if (prodsRes.ok) {
         const updatedList: Product[] = await prodsRes.json();
+        saveProducts(updatedList);
         onImportSuccess(updatedList);
       }
     } catch (err: any) {
-      console.error('Import error:', err);
-      setErrorMsg(`បរាជ័យក្នុងការ Import: ${err.message}`);
+      console.warn('Backend batch import failed or offline, falling back to LocalStorage:', err);
+      try {
+        // Construct Product objects for offline resilience
+        const localMerged: Product[] = [...existingProducts];
+        const barcodeMap = new Map<string, number>();
+        localMerged.forEach((p, idx) => {
+          barcodeMap.set((p.barcode || '').toLowerCase().trim(), idx);
+        });
+
+        let addedCount = 0;
+        let updatedCount = 0;
+
+        for (const row of parsedRows) {
+          const key = row.barcode.toLowerCase().trim();
+          const existingIdx = barcodeMap.get(key);
+          if (existingIdx !== undefined) {
+            // Update existing
+            localMerged[existingIdx] = {
+              ...localMerged[existingIdx],
+              name: row.name,
+              khmerName: row.khmerName || localMerged[existingIdx].khmerName,
+              category: row.category,
+              unit: row.unit,
+              costPrice: row.costPrice,
+              sellingPrice: row.sellingPrice,
+              currentStock: row.currentStock,
+              minStock: row.minStock,
+              supplierName: row.supplierName,
+              supplierPhone: row.supplierPhone || localMerged[existingIdx].supplierPhone
+            };
+            updatedCount++;
+          } else {
+            // Add new
+            const newProd: Product = {
+              id: `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+              barcode: row.barcode,
+              name: row.name,
+              khmerName: row.khmerName,
+              category: row.category,
+              unit: row.unit,
+              costPrice: row.costPrice,
+              sellingPrice: row.sellingPrice,
+              currentStock: row.currentStock,
+              minStock: row.minStock,
+              supplierName: row.supplierName,
+              supplierPhone: row.supplierPhone
+            };
+            localMerged.push(newProd);
+            barcodeMap.set(key, localMerged.length - 1);
+            addedCount++;
+          }
+        }
+
+        saveProducts(localMerged);
+        onImportSuccess(localMerged);
+        setSuccessCount(addedCount + updatedCount);
+      } catch (fallbackErr: any) {
+        console.error('Offline import fallback error:', fallbackErr);
+        setErrorMsg(`បរាជ័យក្នុងការ Import: ${err.message || fallbackErr.message}`);
+      }
     } finally {
       setIsSubmitting(false);
     }

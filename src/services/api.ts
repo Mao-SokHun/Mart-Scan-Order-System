@@ -110,6 +110,13 @@ export const api = {
     return res.ok;
   },
 
+  async deleteProduct(productId: string): Promise<boolean> {
+    const res = await fetch(`${API_BASE_URL}/products/${productId}`, {
+      method: 'DELETE'
+    });
+    return res.ok;
+  },
+
   async syncBatchRestockItems(items: RestockItem[]): Promise<{ count: number; items: RestockItem[] }> {
     const res = await fetch(`${API_BASE_URL}/restock/batch`, {
       method: 'POST',

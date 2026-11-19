@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
-import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check, FileSpreadsheet } from 'lucide-react';
+import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check, FileSpreadsheet, Trash2 } from 'lucide-react';
 
 interface ProductCatalogModalProps {
   isOpen: boolean;
@@ -9,6 +9,7 @@ interface ProductCatalogModalProps {
   onOpenAddNew: () => void;
   onOpenImportExcel?: () => void;
   onAddToOrder: (product: Product) => void;
+  onDeleteProduct?: (productId: string) => void;
   onResetDemoData: () => void;
 }
 
@@ -19,6 +20,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   onOpenAddNew,
   onOpenImportExcel,
   onAddToOrder,
+  onDeleteProduct,
   onResetDemoData
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,27 +193,44 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
                     <span className="text-xs font-bold text-slate-800">
                       ${(prod.costPrice || 0).toFixed(2)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleAdd(prod)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition ${
-                        isAdded
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200'
-                      }`}
-                    >
-                      {isAdded ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>បានដាក់</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>+ ទិញ</span>
-                        </>
+                    <div className="flex items-center gap-1">
+                      {onDeleteProduct && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`តើអ្នកពិតជាចង់លុបទំនិញ «${prod.name}» (Barcode: ${prod.barcode}) ចេញពី Catalog មែនទេ?`)) {
+                              onDeleteProduct(prod.id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                          title="លុបទំនិញចេញពី Catalog"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAdd(prod)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition ${
+                          isAdded
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200'
+                        }`}
+                      >
+                        {isAdded ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>បានដាក់</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <span>+ ទិញ</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

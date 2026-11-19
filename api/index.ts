@@ -549,8 +549,18 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
     let insertedCount = 0;
     for (const p of items) {
       if (!p.barcode || !p.name) continue;
-      const cleanBarcode = String(p.barcode).trim();
-      const id = p.id || `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      let cleanBarcode = String(p.barcode).trim();
+      if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
+      if (!cleanBarcode) continue;
+
+      // Check for existing product by case-insensitive barcode to ensure exact conflict target
+      const existing = await client.query(
+        'SELECT id, barcode FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;',
+        [cleanBarcode]
+      );
+      const targetBarcode = existing.rows.length > 0 ? existing.rows[0].barcode : cleanBarcode;
+      const id = existing.rows.length > 0 ? existing.rows[0].id : (p.id || `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+
       await client.query(`
         INSERT INTO products (
           id, barcode, name, khmer_name, category, unit,
@@ -567,7 +577,7 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
           supplier_name = COALESCE(EXCLUDED.supplier_name, products.supplier_name),
           updated_at = CURRENT_TIMESTAMP;
       `, [
-        id, cleanBarcode, String(p.name).trim(), p.khmerName ? String(p.khmerName).trim() : null,
+        id, targetBarcode, String(p.name).trim(), p.khmerName ? String(p.khmerName).trim() : null,
         p.category ? String(p.category).trim() : 'ផ្សេងៗ (Other)', p.unit ? String(p.unit).trim() : 'កំប៉ុង',
         Math.max(0, safeFloat(p.costPrice, 0)), Math.max(0, safeFloat(p.sellingPrice, 0)),
         Math.max(0, safeInt(p.currentStock, 0)), Math.max(0, safeInt(p.minStock, 10)),
@@ -586,7 +596,7 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
   }
 });
 
-// 7. GET current restock items
+// 8. GET current restock items
 app.get('/api/restock', async (_req: Request, res: Response) => {
   try {
     const query = `
@@ -607,7 +617,7 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
   }
 });
 
-// 8. POST /api/restock/scan - CORE SCAN ENDPOINT (Race-condition safe with ON CONFLICT)
+// 9. POST /api/restock/scan - CORE SCAN ENDPOINT (Race-condition safe with ON CONFLICT)
 app.post('/api/restock/scan', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.body || {};
@@ -696,7 +706,7 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
   }
 });
 
-// 9. PUT update quantity and note of restock item (supports update by item ID or product ID, with auto-upsert)
+// 10. PUT update quantity and note of restock item (supports update by item ID or product ID, with auto-upsert)
 app.put('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -752,7 +762,7 @@ app.put('/api/restock/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 10. POST /api/restock/batch - Sync batch restock items (used for offline synchronization)
+// 11. POST /api/restock/batch - Sync batch restock items (used for offline synchronization)
 app.post('/api/restock/batch', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
@@ -782,8 +792,17 @@ app.post('/api/restock/batch', async (req: Request, res: Response) => {
           id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at, note, status
         ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8)
         ON CONFLICT (product_id) DO UPDATE SET
-          order_quantity = GREATEST(restock_items.order_quantity, EXCLUDED.order_quantity),
-          total_cost = GREATEST(restock_items.order_quantity, EXCLUDED.order_quantity) * EXCLUDED.unit_cost,
+          order_quantity = CASE 
+            WHEN EXCLUDED.order_quantity > 0 THEN EXCLUDED.order_quantity 
+            ELSE restock_items.order_quantity 
+          END,
+          total_cost = ROUND(
+            (CASE 
+              WHEN EXCLUDED.order_quantity > 0 THEN EXCLUDED.order_quantity 
+              ELSE restock_items.order_quantity 
+            END) * EXCLUDED.unit_cost, 
+            2
+          ),
           note = COALESCE(EXCLUDED.note, restock_items.note),
           status = COALESCE(EXCLUDED.status, restock_items.status);
       `, [id, prod.id, prod.barcode, qty, unitCost, totalCost, item.note || null, item.status || 'pending']);
@@ -811,7 +830,7 @@ app.post('/api/restock/batch', async (req: Request, res: Response) => {
   }
 });
 
-// 11. DELETE single item from restock list (supports deletion by item ID, product ID, or barcode)
+// 12. DELETE single item from restock list (supports deletion by item ID, product ID, or barcode)
 app.delete('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -822,7 +841,7 @@ app.delete('/api/restock/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 12. DELETE clear all restock items
+// 13. DELETE clear all restock items
 app.delete('/api/restock', async (_req: Request, res: Response) => {
   try {
     await pool.query('DELETE FROM restock_items;');

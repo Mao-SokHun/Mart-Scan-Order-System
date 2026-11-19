@@ -83,15 +83,39 @@ export const App: React.FC = () => {
             saveRestockItems(dbRestock);
             return dbRestock;
           }
-          const merged = [...dbRestock];
           const unSynced: RestockItem[] = [];
+          const localMap = new Map<string, RestockItem>();
+          for (const loc of prevLocal) {
+            if (loc.product?.id) localMap.set(loc.product.id, loc);
+            if (loc.id) localMap.set(loc.id, loc);
+          }
+
+          // Merge db items with offline local overrides
+          const merged: RestockItem[] = dbRestock.map(dbItem => {
+            const locItem = localMap.get(dbItem.product.id) || localMap.get(dbItem.id);
+            if (locItem) {
+              // If user modified quantity or details locally while offline, preserve local edits
+              if (locItem.orderQuantity > 0 && dbItem.orderQuantity === 0) {
+                unSynced.push({ ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost });
+                return { ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost };
+              }
+              if (locItem.orderQuantity !== dbItem.orderQuantity && locItem.orderQuantity > 0) {
+                unSynced.push({ ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost });
+                return { ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost };
+              }
+            }
+            return dbItem;
+          });
+
+          // Check for items added completely offline that aren't in dbRestock
           for (const localItem of prevLocal) {
-            const exists = merged.some(m => m.product.id === localItem.product.id || m.id === localItem.id);
-            if (!exists) {
+            const existsInDb = dbRestock.some(m => m.product.id === localItem.product.id || m.id === localItem.id);
+            if (!existsInDb) {
               merged.push(localItem);
               unSynced.push(localItem);
             }
           }
+
           if (unSynced.length > 0) {
             api.syncBatchRestockItems(unSynced).catch(e => console.warn('Sync offline restock items error:', e));
           }
@@ -315,6 +339,35 @@ export const App: React.FC = () => {
     }
   };
 
+  // Delete product from catalog
+  const handleDeleteProduct = async (productId: string) => {
+    const target = products.find(p => p.id === productId);
+    const prodName = target ? target.name : '';
+
+    setProducts(prev => {
+      const updated = prev.filter(p => p.id !== productId);
+      saveProducts(updated);
+      return updated;
+    });
+
+    // Also remove from active restock items if present
+    setRestockItems(prev => {
+      const updated = prev.filter(i => i.product.id !== productId);
+      saveRestockItems(updated);
+      return updated;
+    });
+
+    if (dbStatus.connected) {
+      try {
+        await api.deleteProduct(productId);
+      } catch (err: any) {
+        console.error('Failed to delete product from DB:', err);
+      }
+    }
+
+    showToast(`បានលុបទំនិញ ${prodName ? `«${prodName}»` : ''} ចេញពី Catalog រួចរាល់`, 'info');
+  };
+
   // Reset to initial demo catalog
   const handleResetDemoData = () => {
     if (window.confirm('តើអ្នកចង់ទាញយកទិន្នន័យពី Neon PostgreSQL ឡើងវិញមែនទេ?')) {
@@ -512,6 +565,7 @@ export const App: React.FC = () => {
           setIsImportExcelOpen(true);
         }}
         onAddToOrder={(product) => handleScan(product.barcode)}
+        onDeleteProduct={handleDeleteProduct}
         onResetDemoData={handleResetDemoData}
       />
 
