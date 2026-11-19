@@ -197,7 +197,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 <button
                   onClick={handleExportWithValidation}
                   className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
-                  title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Takeo Plan (មានទាំង PO Summary + 4 Sheets + ចំនួនត្រូវទិញ)"
+                  title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Daily Plan (មានទាំង PO Summary + 4 Sheets + ចំនួនត្រូវទិញ)"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
                   <span>Excel Plan ({orderDay})</span>

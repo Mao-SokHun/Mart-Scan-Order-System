@@ -45,10 +45,10 @@ const parseVendorAndRemark = (supplierName: string): { vendor: string; remark: s
 };
 
 /**
- * Main Export: Takeo Daily Plan Format with prominent "ចំនួនត្រូវទិញ (Order Qty)" column
+ * Main Export: Store Daily Plan Format with prominent "ចំនួនត្រូវទិញ (Order Qty)" column
  * and Department Sheets ('Daily', 'Bakery and Cake', 'Fresh', ' Milk and Yogurt')
  */
-export const exportToTakeoPlanExcel = (
+export const exportDailyPlanExcel = (
   items: RestockItem[], 
   orderDay: OrderDay = getCurrentDayOfWeek(),
   supplierFilter?: string
@@ -61,7 +61,7 @@ export const exportToTakeoPlanExcel = (
 
   if (filteredItems.length === 0) return false;
 
-  // Exact Takeo Plan Columns enhanced with explicit "ចំនួនត្រូវទិញ (Order Qty)" & Costs
+  // Exact Daily Plan Columns enhanced with explicit "ចំនួនត្រូវទិញ (Order Qty)" & Costs
   const headers = [
     'Storage Temperature',
     'Item Code',
@@ -213,7 +213,7 @@ export const exportToTakeoPlanExcel = (
   ];
   XLSX.utils.book_append_sheet(workbook, wsSummary, 'បញ្ជីទិញសរុប (PO Summary)');
 
-  // 2. ADD DEPARTMENT SHEETS matching Takeo Store structure
+  // 2. ADD DEPARTMENT SHEETS matching Store Daily Plan structure
   const sheetOrder = ['Daily', 'Bakery and Cake', 'Fresh', ' Milk and Yogurt'];
   for (const sheetName of sheetOrder) {
     const rows = sheetsData[sheetName];
@@ -255,10 +255,13 @@ export const exportToTakeoPlanExcel = (
   }
 
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `Takeo_Daily_Plan_Order_${orderDay}_${dateStr}.xlsx`;
+  const filename = `Daily_Order_Plan_${orderDay}_${dateStr}.xlsx`;
   XLSX.writeFile(workbook, filename);
   return true;
 };
+
+// Alias for backwards compatibility
+export const exportToTakeoPlanExcel = exportDailyPlanExcel;
 
 /**
  * Simple Clean PO Export (Single Sheet)
@@ -345,7 +348,7 @@ export const copyToTelegramClipboard = async (
   const totalQty = filteredItems.reduce((acc, curr) => acc + curr.orderQuantity, 0);
   const dateStr = new Date().toLocaleDateString('km-KH');
 
-  let text = `📦 *តារាងបញ្ជាទិញទំនិញ (Store Takeo Daily Plan)*\n`;
+  let text = `📦 *តារាងបញ្ជាទិញទំនិញ (Daily Order Plan)*\n`;
   text += `📅 កាលបរិច្ឆេទ: ${dateStr} (ថ្ងៃ ${orderDay})\n`;
   if (supplierFilter && supplierFilter !== 'all') {
     text += `🏢 អ្នកផ្គត់ផ្គង់: *${supplierFilter}*\n`;
@@ -367,7 +370,7 @@ export const copyToTelegramClipboard = async (
   if (totalCost > 0) {
     text += `💰 សរុបទឹកប្រាក់: *$${totalCost.toFixed(2)}*\n`;
   }
-  text += `\n_បង្កើតដោយប្រព័ន្ធ Mart Scan & Order Takeo_`;
+  text += `\n_បង្កើតដោយប្រព័ន្ធ Mart Scan & Order_`;
 
   try {
     await navigator.clipboard.writeText(text);
