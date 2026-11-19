@@ -13,18 +13,18 @@ export const getCurrentDayOfWeek = (): OrderDay => {
 // Helper to determine storage temperature from category
 const extractStorageTemp = (category: string): string => {
   const cat = (category || '').toLowerCase();
-  if (cat.includes('chilled')) return 'Chilled';
-  if (cat.includes('frozen')) return 'Frozen';
-  if (cat.includes('dry')) return 'Dry';
+  if (cat.includes('chilled') || cat.includes('ត្រជាក់') || cat.includes('ទឹកដោះគោ') || cat.includes('dairy') || cat.includes('milk') || cat.includes('yogurt')) return 'Chilled';
+  if (cat.includes('frozen') || cat.includes('កក')) return 'Frozen';
+  if (cat.includes('dry') || cat.includes('ស្ងួត') || cat.includes('ក្រៀម')) return 'Dry';
   return 'Dry';
 };
 
 // Helper to determine department sheet name
 const extractSheetName = (category: string): string => {
   const cat = (category || '').toLowerCase();
-  if (cat.includes('bakery') || cat.includes('cake')) return 'Bakery and Cake';
-  if (cat.includes('fresh') || cat.includes('fruit') || cat.includes('seafood')) return 'Fresh';
-  if (cat.includes('milk') || cat.includes('yogurt') || cat.includes('dairy')) return ' Milk and Yogurt';
+  if (cat.includes('bakery') || cat.includes('cake') || cat.includes('នំបុ័ង')) return 'Bakery and Cake';
+  if (cat.includes('fresh') || cat.includes('fruit') || cat.includes('seafood') || cat.includes('ផ្លែឈើ') || cat.includes('បន្លែ') || cat.includes('ស្រស់')) return 'Fresh';
+  if (cat.includes('milk') || cat.includes('yogurt') || cat.includes('dairy') || cat.includes('ទឹកដោះគោ') || cat.includes('យ៉ាអួរ')) return ' Milk and Yogurt';
   return 'Daily';
 };
 
@@ -34,12 +34,12 @@ const parseVendorAndRemark = (supplierName: string): { vendor: string; remark: s
   const match = raw.match(/^(.*?)\s*\[(.*?)\]$/);
   if (match) {
     return {
-      vendor: match[1].trim(),
-      remark: match[2].trim()
+      vendor: match[1].trim() || 'ទូទៅ',
+      remark: match[2].trim() || 'Delivery on Thu'
     };
   }
   return {
-    vendor: raw.trim(),
+    vendor: raw.trim() || 'ទូទៅ',
     remark: 'Delivery on Thu'
   };
 };
@@ -292,7 +292,13 @@ export const exportToSimplePOExcel = (items: RestockItem[], supplierFilter?: str
     'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
     'អ្នកផ្គត់ផ្គង់ (Supplier)': item.product.supplierName,
     'លេខទូរស័ព្ទ (Phone)': item.product.supplierPhone || '',
-    'ម៉ោងស្កេន (Scanned At)': new Date(item.scannedAt).toLocaleString('km-KH')
+    'ម៉ោងស្កេន (Scanned At)': (() => {
+      try {
+        return item.scannedAt ? new Date(item.scannedAt).toLocaleString('km-KH') : '';
+      } catch {
+        return item.scannedAt ? new Date(item.scannedAt).toLocaleString() : '';
+      }
+    })()
   }));
 
   // Add Grand Total row
@@ -349,9 +355,14 @@ export const copyToTelegramClipboard = async (
     ? items.filter(i => i.product.supplierName === supplierFilter)
     : items;
 
-  const totalCost = filteredItems.reduce((acc, curr) => acc + curr.totalCost, 0);
-  const totalQty = filteredItems.reduce((acc, curr) => acc + curr.orderQuantity, 0);
-  const dateStr = new Date().toLocaleDateString('km-KH');
+  const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
+  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
+  let dateStr = '';
+  try {
+    dateStr = new Date().toLocaleDateString('km-KH');
+  } catch {
+    dateStr = new Date().toLocaleDateString();
+  }
 
   let text = `📦 *តារាងបញ្ជាទិញទំនិញ (Daily Order Plan)*\n`;
   text += `📅 កាលបរិច្ឆេទ: ${dateStr} (ថ្ងៃ ${orderDay})\n`;
@@ -378,8 +389,20 @@ export const copyToTelegramClipboard = async (
   text += `\n_បង្កើតដោយប្រព័ន្ធ Mart Scan & Order_`;
 
   try {
-    await navigator.clipboard.writeText(text);
-    return true;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    // Fallback for mobile Safari / older webviews / non-HTTPS
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return successful;
   } catch (err) {
     console.error('Failed to copy to clipboard:', err);
     return false;

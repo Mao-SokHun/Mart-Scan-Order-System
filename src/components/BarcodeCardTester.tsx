@@ -9,10 +9,11 @@ interface BarcodeCardTesterProps {
 
 // Generate realistic looking SVG barcode lines from a string
 const BarcodeSvg: React.FC<{ code: string }> = ({ code }) => {
+  const safeCode = code || '';
   // Deterministic bar widths based on char codes
   const bars: { width: number; isSpace: boolean }[] = [];
-  for (let i = 0; i < code.length; i++) {
-    const charCode = code.charCodeAt(i);
+  for (let i = 0; i < safeCode.length; i++) {
+    const charCode = safeCode.charCodeAt(i);
     bars.push({ width: (charCode % 3) + 1.5, isSpace: false });
     bars.push({ width: ((charCode * 3) % 4) + 1.2, isSpace: true });
     bars.push({ width: ((charCode * 7) % 3) + 1.5, isSpace: false });
@@ -47,7 +48,7 @@ const BarcodeSvg: React.FC<{ code: string }> = ({ code }) => {
         <rect x="154" y="0" width="2" height="40" fill="#000" />
       </svg>
       <span className="font-mono text-[10px] tracking-widest text-slate-800 font-bold mt-1">
-        {code}
+        {safeCode}
       </span>
     </div>
   );

@@ -27,6 +27,8 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
   const readerElementId = 'camera-barcode-reader';
 
   // Handle successful scan
@@ -53,7 +55,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     setLastScannedCode(cleanCode);
     setScanCount(prev => prev + 1);
 
-    sound.playSuccessBeep();
+    // Call onScan (handleScan will play beep and show toast)
     onScan(cleanCode);
   }, [onScan]);
 
@@ -157,6 +159,15 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         (decodedText) => handleBarcodeDecoded(decodedText),
         () => {} // Silent ignore of non-barcode frames
       );
+
+      // If user closed modal while camera was initializing, stop immediately
+      if (!isOpenRef.current) {
+        try {
+          if (html5QrCode.isScanning) await html5QrCode.stop();
+          await html5QrCode.clear();
+        } catch {}
+        return;
+      }
 
       setIsScanning(true);
       setIsStarting(false);

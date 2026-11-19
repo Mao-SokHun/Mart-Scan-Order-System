@@ -15,7 +15,7 @@ interface RestockOrderTableProps {
   onClearAll: () => void;
   onExportExcel: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
   onExportSimplePO?: (itemsToExport: RestockItem[], supplierFilter?: string) => void;
-  onCopyToTelegram: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
+  onCopyToTelegram: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void | boolean | Promise<boolean>;
   onOpenPrintPO: () => void;
 }
 
@@ -35,26 +35,30 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const [orderDay, setOrderDay] = useState<OrderDay>(getCurrentDayOfWeek());
   const [copiedTelegram, setCopiedTelegram] = useState(false);
 
-  // Extract unique suppliers
-  const suppliers = Array.from(new Set(items.map(i => i.product.supplierName)));
+  // Extract unique clean suppliers
+  const suppliers = Array.from(new Set(items.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean);
 
   // Filter items
   const filteredItems = items.filter(item => {
-    const matchesSupplier = supplierFilter === 'all' || item.product.supplierName === supplierFilter;
-    const q = searchQuery.toLowerCase();
+    const itemSupplier = (item.product.supplierName || 'ទូទៅ (General Supplier)').trim();
+    const matchesSupplier = supplierFilter === 'all' || itemSupplier === supplierFilter;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return matchesSupplier;
     const matchesSearch = 
       item.product.name.toLowerCase().includes(q) ||
       (item.product.khmerName && item.product.khmerName.toLowerCase().includes(q)) ||
-      item.product.barcode.includes(q) ||
-      item.product.category.toLowerCase().includes(q);
+      item.product.barcode.toLowerCase().includes(q) ||
+      item.product.category.toLowerCase().includes(q) ||
+      (item.product.supplierName && item.product.supplierName.toLowerCase().includes(q));
     return matchesSupplier && matchesSearch;
   });
 
-  const totalCost = filteredItems.reduce((acc, curr) => acc + curr.totalCost, 0);
-  const totalQty = filteredItems.reduce((acc, curr) => acc + curr.orderQuantity, 0);
+  const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
+  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   const zeroQtyCount = filteredItems.filter(i => i.orderQuantity <= 0).length;
 
   const handleExportWithValidation = () => {
+    if (filteredItems.length === 0) return;
     if (zeroQtyCount > 0) {
       const confirm = window.confirm(
         `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្ត Export ឯកសារ Excel ដែរឬទេ?`
@@ -65,6 +69,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   };
 
   const handleExportSimplePOWithValidation = () => {
+    if (filteredItems.length === 0) return;
     if (zeroQtyCount > 0) {
       const confirm = window.confirm(
         `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្ត Export បញ្ជីកុម្ម៉ង់ PO ដែរឬទេ?`
@@ -76,16 +81,28 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
     }
   };
 
-  const handleCopyTelegram = () => {
+  const handleCopyTelegram = async () => {
+    if (filteredItems.length === 0) return;
     if (zeroQtyCount > 0) {
       const confirm = window.confirm(
         `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្តចម្លងទៅ Telegram ដែរឬទេ?`
       );
       if (!confirm) return;
     }
-    onCopyToTelegram(filteredItems, orderDay, supplierFilter);
-    setCopiedTelegram(true);
-    setTimeout(() => setCopiedTelegram(false), 2000);
+    const res = await onCopyToTelegram(filteredItems, orderDay, supplierFilter);
+    if (res !== false) {
+      setCopiedTelegram(true);
+      setTimeout(() => setCopiedTelegram(false), 2000);
+    }
+  };
+
+  // Safe removal with confirmation if quantity has already been counted
+  const handleSafeRemove = (item: RestockItem) => {
+    if (item.orderQuantity > 0) {
+      const ok = window.confirm(`តើអ្នកពិតជាចង់លុបទំនិញ «${item.product.name}» (ចំនួន: ${item.orderQuantity}) ចេញមែនទេ?`);
+      if (!ok) return;
+    }
+    onRemoveItem(item.id);
   };
 
   return (
@@ -196,7 +213,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                 <button
                   onClick={handleExportWithValidation}
-                  className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
+                  disabled={filteredItems.length === 0}
+                  className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
                   title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Daily Plan (មានទាំង PO Summary + 4 Sheets + ចំនួនត្រូវទិញ)"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -206,7 +224,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 {onExportSimplePO && (
                   <button
                     onClick={handleExportSimplePOWithValidation}
-                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
+                    disabled={filteredItems.length === 0}
+                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-700 border border-emerald-300 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
                     title="ទាញយកបញ្ជីកុម្ម៉ង់ PO សាមញ្ញ (1 Sheet)"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
@@ -217,7 +236,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                 <button
                   onClick={handleCopyTelegram}
-                  className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
+                  disabled={filteredItems.length === 0}
+                  className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-sky-50 hover:bg-sky-100 disabled:opacity-50 disabled:cursor-not-allowed text-sky-700 border border-sky-200 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
                   title="ចម្លងអត្ថបទសម្រាប់ផ្ញើតាម Telegram"
                 >
                   {copiedTelegram ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Send className="w-3.5 h-3.5" />}
@@ -312,7 +332,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                           )}
                         </div>
                         <button
-                          onClick={() => onRemoveItem(item.id)}
+                          onClick={() => handleSafeRemove(item)}
                           className="p-1 text-slate-300 hover:text-rose-600 rounded-lg transition shrink-0 -mt-0.5"
                           title="លុបចេញ"
                         >
@@ -432,7 +452,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               </div>
               <div className="text-right">
                 <span className="text-[10px] text-slate-400 block font-medium">ទឹកប្រាក់សរុប</span>
-                <span className="text-base font-extrabold text-emerald-600">${totalCost.toFixed(2)}</span>
+                <span className="text-base font-extrabold text-emerald-600">${(totalCost || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -622,7 +642,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                       {/* Delete action */}
                       <td className="py-3.5 px-3 text-center">
                         <button
-                          onClick={() => onRemoveItem(item.id)}
+                          onClick={() => handleSafeRemove(item)}
                           className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                           title="លុបមុខទំនិញនេះចេញ"
                         >
@@ -645,7 +665,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                     {totalQty} ឯកតា
                   </td>
                   <td className="py-3.5 px-3 text-right text-emerald-600 text-sm">
-                    ${totalCost.toFixed(2)}
+                    ${(totalCost || 0).toFixed(2)}
                   </td>
                   <td></td>
                 </tr>

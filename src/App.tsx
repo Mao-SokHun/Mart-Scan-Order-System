@@ -136,13 +136,8 @@ export const App: React.FC = () => {
           setHighlightedItemId(item.id);
           setTimeout(() => setHighlightedItemId(null), 2500);
           showToast(`✅ បានស្កេន «${item.product.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
-        } else {
-          sound.playErrorBuzz();
-          setNotFoundBarcode(cleanBarcode);
-          setIsAddProductOpen(true);
-          showToast(`រកមិនឃើញ Barcode "${cleanBarcode}" ក្នុង PostgreSQL ទេ!`, 'error');
+          return;
         }
-        return;
       } catch (e) {
         console.warn('API scan failed, falling back to local search:', e);
       }
@@ -189,7 +184,7 @@ export const App: React.FC = () => {
   // Global listener for USB/Bluetooth Barcode Scanner Guns
   useBarcodeGun({
     onScan: handleScan,
-    enabled: !isAddProductOpen && !isPrintPOOpen
+    enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen
   });
 
   // Quantity updater
@@ -260,12 +255,32 @@ export const App: React.FC = () => {
     }
 
     setProducts(prev => [savedProd, ...prev]);
-    showToast(`បានចុះឈ្មោះទំនិញ "${savedProd.name}" ចូលក្នុង PostgreSQL ជោគជ័យ`, 'success');
+    showToast(`បានចុះឈ្មោះទំនិញ "${savedProd.name}" ចូលក្នុងប្រព័ន្ធជោគជ័យ`, 'success');
 
     if (addToOrderNow) {
-      setTimeout(() => {
-        handleScan(savedProd.barcode);
-      }, 60);
+      sound.playSuccessBeep();
+      const newItem: RestockItem = {
+        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        product: savedProd,
+        orderQuantity: 0,
+        scannedAt: new Date().toISOString(),
+        unitCost: savedProd.costPrice || 0,
+        totalCost: 0
+      };
+
+      setRestockItems(prev => {
+        const exists = prev.some(i => i.product.id === savedProd.id || i.product.barcode.toLowerCase() === savedProd.barcode.toLowerCase());
+        if (exists) return prev;
+        return [newItem, ...prev];
+      });
+
+      setHighlightedItemId(newItem.id);
+      setTimeout(() => setHighlightedItemId(null), 2500);
+
+      // Async sync to DB if connected
+      if (dbStatus.connected) {
+        api.scanBarcode(savedProd.barcode).catch(err => console.warn('Sync scan failed:', err));
+      }
     }
   };
 
