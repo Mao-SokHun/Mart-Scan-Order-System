@@ -257,6 +257,8 @@ export const App: React.FC = () => {
   const handleUpdateQuantity = async (itemId: string, newQty: number) => {
     if (newQty < 0) return;
 
+    const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
+
     // Optimistic local update with safe 2-decimal rounding
     setRestockItems(prev => prev.map(item => {
       if (item.id === itemId || item.product.id === itemId) {
@@ -271,7 +273,13 @@ export const App: React.FC = () => {
 
     if (dbStatus.connected) {
       try {
-        await api.updateQuantity(itemId, newQty);
+        await api.updateQuantity(
+          itemId, 
+          newQty, 
+          targetItem?.product?.id, 
+          targetItem?.product?.barcode,
+          targetItem?.note
+        );
       } catch (err) {
         console.error('Failed to sync quantity to DB:', err);
       }
@@ -280,12 +288,13 @@ export const App: React.FC = () => {
 
   // Remove single item
   const handleRemoveItem = async (itemId: string) => {
+    const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
     setRestockItems(prev => prev.filter(i => i.id !== itemId && i.product.id !== itemId));
     showToast('បានលុបទំនិញចេញពីតារាង', 'info');
 
     if (dbStatus.connected) {
       try {
-        await api.deleteRestockItem(itemId);
+        await api.deleteRestockItem(itemId, targetItem?.product?.id, targetItem?.product?.barcode);
       } catch (err) {
         console.error('Failed to delete item from DB:', err);
       }

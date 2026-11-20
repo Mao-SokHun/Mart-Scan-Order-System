@@ -474,13 +474,6 @@ app.post('/api/products', async (req: Request, res: Response) => {
   }
 });
 
-    res.status(201).json(mapProduct(result.rows[0]));
-  } catch (err: any) {
-    console.error('Error creating product:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // 5. PUT update existing product
 app.put('/api/products/:id', async (req: Request, res: Response) => {
   try {
@@ -723,24 +716,34 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
   }
 });
 
-// 10. PUT update quantity and note of restock item (supports update by item ID or product ID, with auto-upsert)
+// 10. PUT update quantity and note of restock item (supports update by item ID, product ID, or barcode with auto-upsert)
 app.put('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { orderQuantity, note, status } = req.body || {};
+    const { orderQuantity, note, status, productId, barcode } = req.body || {};
     const qty = Math.max(0, safeInt(orderQuantity, 0));
 
-    // Check if restock item exists by ID or product_id
+    // Check if restock item exists by ID, product_id, or barcode
     const check = await pool.query(
-      'SELECT id, product_id, unit_cost FROM restock_items WHERE id = $1 OR product_id = $1 LIMIT 1;',
-      [id]
+      `SELECT id, product_id, unit_cost FROM restock_items 
+       WHERE id = $1 
+          OR product_id = $1 
+          OR ($2::text IS NOT NULL AND product_id = $2)
+          OR ($3::text IS NOT NULL AND LOWER(TRIM(barcode)) = LOWER(TRIM($3)))
+       LIMIT 1;`,
+      [id, productId ? String(productId).trim() : null, barcode ? String(barcode).trim() : null]
     );
 
     if (check.rows.length === 0) {
       // If item was added offline, check products table to auto-upsert
       const prodCheck = await pool.query(
-        'SELECT * FROM products WHERE id = $1 OR LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;',
-        [id]
+        `SELECT * FROM products 
+         WHERE id = $1 
+            OR LOWER(TRIM(barcode)) = LOWER(TRIM($1))
+            OR ($2::text IS NOT NULL AND id = $2)
+            OR ($3::text IS NOT NULL AND LOWER(TRIM(barcode)) = LOWER(TRIM($3)))
+         LIMIT 1;`,
+        [id, productId ? String(productId).trim() : null, barcode ? String(barcode).trim() : null]
       );
       if (prodCheck.rows.length > 0) {
         const prod = prodCheck.rows[0];
@@ -851,7 +854,18 @@ app.post('/api/restock/batch', async (req: Request, res: Response) => {
 app.delete('/api/restock/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM restock_items WHERE id = $1 OR product_id = $1 OR LOWER(TRIM(barcode)) = LOWER(TRIM($1));', [id]);
+    const productId = req.query.productId ? String(req.query.productId).trim() : null;
+    const barcode = req.query.barcode ? String(req.query.barcode).trim() : null;
+
+    await pool.query(
+      `DELETE FROM restock_items 
+       WHERE id = $1 
+          OR product_id = $1 
+          OR LOWER(TRIM(barcode)) = LOWER(TRIM($1))
+          OR ($2::text IS NOT NULL AND product_id = $2)
+          OR ($3::text IS NOT NULL AND LOWER(TRIM(barcode)) = LOWER(TRIM($3)));`,
+      [id, productId, barcode]
+    );
     res.json({ success: true, deletedId: id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -361,6 +361,56 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
   const newCount = parsedRows.filter(r => !r.isExisting).length;
   const updateCount = parsedRows.filter(r => r.isExisting).length;
 
+  // Construct Product objects for offline resilience or fallback
+  const buildMergedList = (): { merged: Product[]; count: number } => {
+    const localMerged: Product[] = [...existingProducts];
+    const barcodeMap = new Map<string, number>();
+    localMerged.forEach((p, idx) => {
+      barcodeMap.set((p.barcode || '').toLowerCase().trim(), idx);
+    });
+
+    let count = 0;
+    for (const row of parsedRows) {
+      const key = row.barcode.toLowerCase().trim();
+      const existingIdx = barcodeMap.get(key);
+      if (existingIdx !== undefined) {
+        localMerged[existingIdx] = {
+          ...localMerged[existingIdx],
+          name: row.name,
+          khmerName: row.khmerName || localMerged[existingIdx].khmerName,
+          category: row.category,
+          unit: row.unit,
+          costPrice: row.costPrice,
+          sellingPrice: row.sellingPrice,
+          currentStock: row.currentStock,
+          minStock: row.minStock,
+          supplierName: row.supplierName,
+          supplierPhone: row.supplierPhone || localMerged[existingIdx].supplierPhone
+        };
+        count++;
+      } else {
+        const newProd: Product = {
+          id: `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          barcode: row.barcode,
+          name: row.name,
+          khmerName: row.khmerName,
+          category: row.category,
+          unit: row.unit,
+          costPrice: row.costPrice,
+          sellingPrice: row.sellingPrice,
+          currentStock: row.currentStock,
+          minStock: row.minStock,
+          supplierName: row.supplierName,
+          supplierPhone: row.supplierPhone
+        };
+        localMerged.push(newProd);
+        barcodeMap.set(key, localMerged.length - 1);
+        count++;
+      }
+    }
+    return { merged: localMerged, count };
+  };
+
   // Submit all parsed products to backend API
   const handleImportSubmit = async () => {
     if (parsedRows.length === 0) return;
@@ -402,64 +452,18 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
         const updatedList: Product[] = await prodsRes.json();
         saveProducts(updatedList);
         onImportSuccess(updatedList);
+      } else {
+        const { merged } = buildMergedList();
+        saveProducts(merged);
+        onImportSuccess(merged);
       }
     } catch (err: any) {
       console.warn('Backend batch import failed or offline, falling back to LocalStorage:', err);
       try {
-        // Construct Product objects for offline resilience
-        const localMerged: Product[] = [...existingProducts];
-        const barcodeMap = new Map<string, number>();
-        localMerged.forEach((p, idx) => {
-          barcodeMap.set((p.barcode || '').toLowerCase().trim(), idx);
-        });
-
-        let addedCount = 0;
-        let updatedCount = 0;
-
-        for (const row of parsedRows) {
-          const key = row.barcode.toLowerCase().trim();
-          const existingIdx = barcodeMap.get(key);
-          if (existingIdx !== undefined) {
-            // Update existing
-            localMerged[existingIdx] = {
-              ...localMerged[existingIdx],
-              name: row.name,
-              khmerName: row.khmerName || localMerged[existingIdx].khmerName,
-              category: row.category,
-              unit: row.unit,
-              costPrice: row.costPrice,
-              sellingPrice: row.sellingPrice,
-              currentStock: row.currentStock,
-              minStock: row.minStock,
-              supplierName: row.supplierName,
-              supplierPhone: row.supplierPhone || localMerged[existingIdx].supplierPhone
-            };
-            updatedCount++;
-          } else {
-            // Add new
-            const newProd: Product = {
-              id: `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-              barcode: row.barcode,
-              name: row.name,
-              khmerName: row.khmerName,
-              category: row.category,
-              unit: row.unit,
-              costPrice: row.costPrice,
-              sellingPrice: row.sellingPrice,
-              currentStock: row.currentStock,
-              minStock: row.minStock,
-              supplierName: row.supplierName,
-              supplierPhone: row.supplierPhone
-            };
-            localMerged.push(newProd);
-            barcodeMap.set(key, localMerged.length - 1);
-            addedCount++;
-          }
-        }
-
-        saveProducts(localMerged);
-        onImportSuccess(localMerged);
-        setSuccessCount(addedCount + updatedCount);
+        const { merged, count } = buildMergedList();
+        saveProducts(merged);
+        onImportSuccess(merged);
+        setSuccessCount(count);
       } catch (fallbackErr: any) {
         console.error('Offline import fallback error:', fallbackErr);
         setErrorMsg(`បរាជ័យក្នុងការ Import: ${err.message || fallbackErr.message}`);

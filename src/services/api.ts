@@ -87,17 +87,28 @@ export const api = {
     return res.json();
   },
 
-  async updateQuantity(itemId: string, orderQuantity: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE_URL}/restock/${itemId}`, {
+  async updateQuantity(
+    itemId: string, 
+    orderQuantity: number, 
+    productId?: string, 
+    barcode?: string, 
+    note?: string
+  ): Promise<boolean> {
+    const res = await fetch(`${API_BASE_URL}/restock/${encodeURIComponent(itemId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderQuantity })
+      body: JSON.stringify({ orderQuantity, productId, barcode, note })
     });
     return res.ok;
   },
 
-  async deleteRestockItem(itemId: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE_URL}/restock/${itemId}`, {
+  async deleteRestockItem(itemId: string, productId?: string, barcode?: string): Promise<boolean> {
+    const params = new URLSearchParams();
+    if (productId) params.append('productId', productId);
+    if (barcode) params.append('barcode', barcode);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(`${API_BASE_URL}/restock/${encodeURIComponent(itemId)}${qs}`, {
       method: 'DELETE'
     });
     return res.ok;
