@@ -287,13 +287,13 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       });
       scannerRef.current = html5QrCode;
 
-      // Restrict resolution to 720p so mobile phones don't freeze
+      // html5-qrcode strictly requires cameraIdOrConfig to have exactly 1 key ({ facingMode: 'environment' } or { deviceId: '...' })
       const cameraConfig = cameraIdToUse
-        ? { deviceId: cameraIdToUse, width: { ideal: 1280 }, height: { ideal: 720 } }
-        : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } };
+        ? { deviceId: cameraIdToUse }
+        : { facingMode: 'environment' };
 
       const config = {
-        fps: 10, // 10 FPS prevents CPU thermal throttling and eliminates video stutter
+        fps: 15, // 15 FPS provides responsive scanning without stutter
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const w = Math.min(Math.floor(viewfinderWidth * 0.85), 320);
           const h = Math.min(Math.floor(viewfinderHeight * 0.40), 160);
