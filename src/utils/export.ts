@@ -29,7 +29,7 @@ const extractSheetName = (category: string): string => {
 };
 
 // Helper to clean vendor and extract remark
-const parseVendorAndRemark = (supplierName: string): { vendor: string; remark: string } => {
+export const parseVendorAndRemark = (supplierName: string): { vendor: string; remark: string } => {
   const raw = supplierName || '';
   const match = raw.match(/^(.*?)\s*\[(.*?)\]$/);
   if (match) {
@@ -61,8 +61,11 @@ export const exportDailyPlanExcel = (
 
   if (filteredItems.length === 0) return false;
 
-  // Exact Daily Plan Columns enhanced with explicit "ចំនួនត្រូវទិញ (Order Qty)" & Costs
-  const headers = [
+  // Check if any item has pricing specified
+  const hasCost = filteredItems.some(i => (i.unitCost || 0) > 0 || (i.totalCost || 0) > 0);
+
+  // Exact Daily Plan Columns: include costs only if products have pricing set
+  const headers = hasCost ? [
     'Storage Temperature',
     'Item Code',
     'Name',
@@ -80,9 +83,25 @@ export const exportDailyPlanExcel = (
     'តម្លៃដើមឯកតា (Unit Cost)',
     'សរុបទឹកប្រាក់ (Total Cost)',
     'Remark'
+  ] : [
+    'Storage Temperature',
+    'Item Code',
+    'Name',
+    'Name in Khmer',
+    'Vendors/Vendor',
+    'Purchase UoM',
+    'ចំនួនត្រូវទិញ (Order Qty)',
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+    'Remark'
   ];
 
-  const colWidths = [
+  const colWidths = hasCost ? [
     { wch: 18 }, // Storage Temperature
     { wch: 18 }, // Item Code
     { wch: 38 }, // Name
@@ -99,6 +118,22 @@ export const exportDailyPlanExcel = (
     { wch: 8 },  // Sun
     { wch: 16 }, // Unit Cost
     { wch: 16 }, // Total Cost
+    { wch: 25 }  // Remark
+  ] : [
+    { wch: 18 }, // Storage Temperature
+    { wch: 18 }, // Item Code
+    { wch: 38 }, // Name
+    { wch: 30 }, // Name in Khmer
+    { wch: 18 }, // Vendors/Vendor
+    { wch: 14 }, // Purchase UoM
+    { wch: 22 }, // ចំនួនត្រូវទិញ (Order Qty)
+    { wch: 8 },  // Mon
+    { wch: 8 },  // Tue
+    { wch: 8 },  // Wed
+    { wch: 8 },  // Thu
+    { wch: 8 },  // Fri
+    { wch: 8 },  // Sat
+    { wch: 8 },  // Sun
     { wch: 25 }  // Remark
   ];
 
@@ -129,11 +164,15 @@ export const exportDailyPlanExcel = (
       'Thu': orderDay === 'Thu' ? item.orderQuantity : '',
       'Fri': orderDay === 'Fri' ? item.orderQuantity : '',
       'Sat': orderDay === 'Sat' ? item.orderQuantity : '',
-      'Sun': orderDay === 'Sun' ? item.orderQuantity : '',
-      'តម្លៃដើមឯកតា (Unit Cost)': `$${(item.unitCost || 0).toFixed(2)}`,
-      'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
-      'Remark': remark
+      'Sun': orderDay === 'Sun' ? item.orderQuantity : ''
     };
+
+    if (hasCost) {
+      row['តម្លៃដើមឯកតា (Unit Cost)'] = `$${(item.unitCost || 0).toFixed(2)}`;
+      row['សរុបទឹកប្រាក់ (Total Cost)'] = `$${(item.totalCost || 0).toFixed(2)}`;
+    }
+
+    row['Remark'] = remark || item.product.remark || '';
 
     if (sheetsData[sheet]) {
       sheetsData[sheet].push(row);
@@ -145,7 +184,7 @@ export const exportDailyPlanExcel = (
   const workbook = XLSX.utils.book_new();
 
   // 1. ADD SUMMARY SHEET: All ordered products in one clean sheet
-  const summaryHeaders = [
+  const summaryHeaders = hasCost ? [
     'ល.រ',
     'កូដទំនិញ (Barcode)',
     'ឈ្មោះទំនិញ (Product Name)',
@@ -158,11 +197,22 @@ export const exportDailyPlanExcel = (
     'សរុបទឹកប្រាក់ (Total Cost)',
     'ថ្ងៃកុម្ម៉ង់ (Order Day)',
     'Remark'
+  ] : [
+    'ល.រ',
+    'កូដទំនិញ (Barcode)',
+    'ឈ្មោះទំនិញ (Product Name)',
+    'ឈ្មោះខ្មែរ (Khmer Name)',
+    'ផ្នែក (Department)',
+    'អ្នកផ្គត់ផ្គង់ (Vendor)',
+    'ឯកតា (Unit)',
+    'ចំនួនត្រូវទិញ (Order Qty)',
+    'ថ្ងៃកុម្ម៉ង់ (Order Day)',
+    'Remark'
   ];
 
   const summaryRows = filteredItems.map((item, idx) => {
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
-    return {
+    const rowObj: Record<string, any> = {
       'ល.រ': idx + 1,
       'កូដទំនិញ (Barcode)': item.product.barcode,
       'ឈ្មោះទំនិញ (Product Name)': item.product.name,
@@ -170,18 +220,23 @@ export const exportDailyPlanExcel = (
       'ផ្នែក (Department)': extractSheetName(item.product.category).trim(),
       'អ្នកផ្គត់ផ្គង់ (Vendor)': vendor,
       'ឯកតា (Unit)': item.product.unit || 'Units',
-      'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity,
-      'តម្លៃដើមឯកតា (Unit Cost)': `$${(item.unitCost || 0).toFixed(2)}`,
-      'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
-      'ថ្ងៃកុម្ម៉ង់ (Order Day)': orderDay,
-      'Remark': remark
+      'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity
     };
+
+    if (hasCost) {
+      rowObj['តម្លៃដើមឯកតា (Unit Cost)'] = `$${(item.unitCost || 0).toFixed(2)}`;
+      rowObj['សរុបទឹកប្រាក់ (Total Cost)'] = `$${(item.totalCost || 0).toFixed(2)}`;
+    }
+
+    rowObj['ថ្ងៃកុម្ម៉ង់ (Order Day)'] = orderDay;
+    rowObj['Remark'] = remark || item.product.remark || '';
+    return rowObj;
   });
 
   // Add Grand Total row to summary sheet
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
-  summaryRows.push({
+  const grandTotalRow: Record<string, any> = {
     'ល.រ': '',
     'កូដទំនិញ (Barcode)': '',
     'ឈ្មោះទំនិញ (Product Name)': 'សរុបរួមទាំងអស់ (GRAND TOTAL)',
@@ -189,15 +244,20 @@ export const exportDailyPlanExcel = (
     'ផ្នែក (Department)': '',
     'អ្នកផ្គត់ផ្គង់ (Vendor)': '',
     'ឯកតា (Unit)': '',
-    'ចំនួនត្រូវទិញ (Order Qty)': totalQty,
-    'តម្លៃដើមឯកតា (Unit Cost)': '',
-    'សរុបទឹកប្រាក់ (Total Cost)': `$${(totalCost || 0).toFixed(2)}`,
-    'ថ្ងៃកុម្ម៉ង់ (Order Day)': orderDay,
-    'Remark': ''
-  } as any);
+    'ចំនួនត្រូវទិញ (Order Qty)': totalQty
+  };
+
+  if (hasCost) {
+    grandTotalRow['តម្លៃដើមឯកតា (Unit Cost)'] = '';
+    grandTotalRow['សរុបទឹកប្រាក់ (Total Cost)'] = `$${(totalCost || 0).toFixed(2)}`;
+  }
+
+  grandTotalRow['ថ្ងៃកុម្ម៉ង់ (Order Day)'] = orderDay;
+  grandTotalRow['Remark'] = '';
+  summaryRows.push(grandTotalRow as any);
 
   const wsSummary = XLSX.utils.json_to_sheet(summaryRows, { header: summaryHeaders });
-  wsSummary['!cols'] = [
+  wsSummary['!cols'] = hasCost ? [
     { wch: 6 },  // ល.រ
     { wch: 18 }, // Barcode
     { wch: 38 }, // Name
@@ -210,6 +270,17 @@ export const exportDailyPlanExcel = (
     { wch: 16 }, // Total Cost
     { wch: 14 }, // Order Day
     { wch: 24 }  // Remark
+  ] : [
+    { wch: 6 },  // ល.រ
+    { wch: 18 }, // Barcode
+    { wch: 38 }, // Name
+    { wch: 30 }, // Khmer Name
+    { wch: 18 }, // Department
+    { wch: 18 }, // Vendor
+    { wch: 12 }, // Unit
+    { wch: 22 }, // ចំនួនត្រូវទិញ (Order Qty)
+    { wch: 14 }, // Order Day
+    { wch: 24 }  // Remark
   ];
   XLSX.utils.book_append_sheet(workbook, wsSummary, 'បញ្ជីទិញសរុប (PO Summary)');
 
@@ -220,34 +291,35 @@ export const exportDailyPlanExcel = (
     if (rows.length > 0) {
       // Add sheet subtotal row
       const sheetQty = rows.reduce((acc, r) => acc + (parseInt(r['ចំនួនត្រូវទិញ (Order Qty)'], 10) || 0), 0);
-      const sheetCost = rows.reduce((acc, r) => {
-        const val = parseFloat(String(r['សរុបទឹកប្រាក់ (Total Cost)']).replace('$', '')) || 0;
-        return acc + val;
-      }, 0);
+      const subtotalRow: Record<string, any> = {
+        'Storage Temperature': '',
+        'Item Code': '',
+        'Name': `សរុបផ្នែក ${sheetName.trim()} (${rows.length} មុខ)`,
+        'Name in Khmer': '',
+        'Vendors/Vendor': '',
+        'Purchase UoM': '',
+        'ចំនួនត្រូវទិញ (Order Qty)': sheetQty,
+        'Mon': orderDay === 'Mon' ? sheetQty : '',
+        'Tue': orderDay === 'Tue' ? sheetQty : '',
+        'Wed': orderDay === 'Wed' ? sheetQty : '',
+        'Thu': orderDay === 'Thu' ? sheetQty : '',
+        'Fri': orderDay === 'Fri' ? sheetQty : '',
+        'Sat': orderDay === 'Sat' ? sheetQty : '',
+        'Sun': orderDay === 'Sun' ? sheetQty : ''
+      };
 
-      const rowsWithSubtotal = [
-        ...rows,
-        {
-          'Storage Temperature': '',
-          'Item Code': '',
-          'Name': `សរុបផ្នែក ${sheetName.trim()} (${rows.length} មុខ)`,
-          'Name in Khmer': '',
-          'Vendors/Vendor': '',
-          'Purchase UoM': '',
-          'ចំនួនត្រូវទិញ (Order Qty)': sheetQty,
-          'Mon': orderDay === 'Mon' ? sheetQty : '',
-          'Tue': orderDay === 'Tue' ? sheetQty : '',
-          'Wed': orderDay === 'Wed' ? sheetQty : '',
-          'Thu': orderDay === 'Thu' ? sheetQty : '',
-          'Fri': orderDay === 'Fri' ? sheetQty : '',
-          'Sat': orderDay === 'Sat' ? sheetQty : '',
-          'Sun': orderDay === 'Sun' ? sheetQty : '',
-          'តម្លៃដើមឯកតា (Unit Cost)': '',
-          'សរុបទឹកប្រាក់ (Total Cost)': `$${sheetCost.toFixed(2)}`,
-          'Remark': ''
-        }
-      ];
+      if (hasCost) {
+        const sheetCost = rows.reduce((acc, r) => {
+          const val = parseFloat(String(r['សរុបទឹកប្រាក់ (Total Cost)']).replace('$', '')) || 0;
+          return acc + val;
+        }, 0);
+        subtotalRow['តម្លៃដើមឯកតា (Unit Cost)'] = '';
+        subtotalRow['សរុបទឹកប្រាក់ (Total Cost)'] = `$${sheetCost.toFixed(2)}`;
+      }
 
+      subtotalRow['Remark'] = '';
+
+      const rowsWithSubtotal = [...rows, subtotalRow];
       const ws = XLSX.utils.json_to_sheet(rowsWithSubtotal, { header: headers });
       ws['!cols'] = colWidths;
       XLSX.utils.book_append_sheet(workbook, ws, sheetName);
@@ -280,60 +352,91 @@ export const exportToSimplePOExcel = (items: RestockItem[], supplierFilter?: str
 
   if (filteredItems.length === 0) return false;
 
-  const rows = filteredItems.map((item, index) => ({
-    'ល.រ (No.)': index + 1,
-    'បារកូដ (Barcode)': item.product.barcode,
-    'ឈ្មោះទំនិញ (Product Name)': item.product.name,
-    'ឈ្មោះខ្មែរ (Khmer Name)': item.product.khmerName || '',
-    'ប្រភេទ (Category)': item.product.category,
-    'ឯកតា (Unit)': item.product.unit,
-    'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity,
-    'តម្លៃដើមឯកតា (Unit Cost)': `$${(item.unitCost || 0).toFixed(2)}`,
-    'សរុបទឹកប្រាក់ (Total Cost)': `$${(item.totalCost || 0).toFixed(2)}`,
-    'អ្នកផ្គត់ផ្គង់ (Supplier)': item.product.supplierName,
-    'លេខទូរស័ព្ទ (Phone)': item.product.supplierPhone || '',
-    'ម៉ោងស្កេន (Scanned At)': (() => {
+  const hasCost = filteredItems.some(i => (i.unitCost || 0) > 0 || (i.totalCost || 0) > 0);
+
+  const rows = filteredItems.map((item, index) => {
+    const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
+    const rowObj: Record<string, any> = {
+      'ល.រ (No.)': index + 1,
+      'បារកូដ (Barcode)': item.product.barcode,
+      'ឈ្មោះទំនិញ (Product Name)': item.product.name,
+      'ឈ្មោះខ្មែរ (Khmer Name)': item.product.khmerName || '',
+      'ប្រភេទ/ផ្នែក (Category)': item.product.category,
+      'អ្នកផ្គត់ផ្គង់ (Supplier)': vendor,
+      'ឯកតាទិញ (Unit)': item.product.unit || 'Units',
+      'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity
+    };
+
+    if (hasCost) {
+      rowObj['តម្លៃដើមឯកតា (Unit Cost)'] = `$${(item.unitCost || 0).toFixed(2)}`;
+      rowObj['សរុបទឹកប្រាក់ (Total Cost)'] = `$${(item.totalCost || 0).toFixed(2)}`;
+    }
+
+    rowObj['កំណត់សម្គាល់ (Remark)'] = remark || item.product.remark || '';
+    rowObj['លេខទូរស័ព្ទ (Phone)'] = item.product.supplierPhone || '';
+    rowObj['ម៉ោងស្កេន (Scanned At)'] = (() => {
       try {
         return item.scannedAt ? new Date(item.scannedAt).toLocaleString('km-KH') : '';
       } catch {
         return item.scannedAt ? new Date(item.scannedAt).toLocaleString() : '';
       }
-    })()
-  }));
+    })();
+
+    return rowObj;
+  });
 
   // Add Grand Total row
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
-  rows.push({
+  const grandTotalRow: Record<string, any> = {
     'ល.រ (No.)': '' as any,
     'បារកូដ (Barcode)': '',
     'ឈ្មោះទំនិញ (Product Name)': 'សរុបរួម (GRAND TOTAL)',
     'ឈ្មោះខ្មែរ (Khmer Name)': `${filteredItems.length} មុខទំនិញ`,
-    'ប្រភេទ (Category)': '',
-    'ឯកតា (Unit)': '',
-    'ចំនួនត្រូវទិញ (Order Qty)': totalQty,
-    'តម្លៃដើមឯកតា (Unit Cost)': '' as any,
-    'សរុបទឹកប្រាក់ (Total Cost)': `$${totalCost.toFixed(2)}` as any,
+    'ប្រភេទ/ផ្នែក (Category)': '',
     'អ្នកផ្គត់ផ្គង់ (Supplier)': '',
-    'លេខទូរស័ព្ទ (Phone)': '',
-    'ម៉ោងស្កេន (Scanned At)': ''
-  });
+    'ឯកតាទិញ (Unit)': '',
+    'ចំនួនត្រូវទិញ (Order Qty)': totalQty
+  };
+
+  if (hasCost) {
+    grandTotalRow['តម្លៃដើមឯកតា (Unit Cost)'] = '' as any;
+    grandTotalRow['សរុបទឹកប្រាក់ (Total Cost)'] = `$${totalCost.toFixed(2)}` as any;
+  }
+
+  grandTotalRow['កំណត់សម្គាល់ (Remark)'] = '';
+  grandTotalRow['លេខទូរស័ព្ទ (Phone)'] = '';
+  grandTotalRow['ម៉ោងស្កេន (Scanned At)'] = '';
+  rows.push(grandTotalRow as any);
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'បញ្ជីទំនិញត្រូវទិញ');
 
-  worksheet['!cols'] = [
+  worksheet['!cols'] = hasCost ? [
     { wch: 8 },  // No
     { wch: 18 }, // Barcode
     { wch: 34 }, // Name
     { wch: 28 }, // Khmer Name
     { wch: 22 }, // Category
-    { wch: 10 }, // Unit
+    { wch: 20 }, // Supplier
+    { wch: 12 }, // Unit
     { wch: 22 }, // Order Qty
     { wch: 14 }, // Unit Cost
     { wch: 14 }, // Total Cost
-    { wch: 28 }, // Supplier
+    { wch: 20 }, // Remark
+    { wch: 16 }, // Phone
+    { wch: 20 }, // Time
+  ] : [
+    { wch: 8 },  // No
+    { wch: 18 }, // Barcode
+    { wch: 34 }, // Name
+    { wch: 28 }, // Khmer Name
+    { wch: 22 }, // Category
+    { wch: 20 }, // Supplier
+    { wch: 14 }, // Unit
+    { wch: 22 }, // Order Qty
+    { wch: 22 }, // Remark
     { wch: 16 }, // Phone
     { wch: 20 }, // Time
   ];

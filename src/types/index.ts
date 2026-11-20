@@ -11,6 +11,7 @@ export interface Product {
   minStock: number; // Reorder threshold
   supplierName: string;
   supplierPhone?: string;
+  remark?: string;
   image?: string;
 }
 

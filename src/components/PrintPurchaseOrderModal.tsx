@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RestockItem } from '../types';
 import { X, Printer, Filter, CheckCircle2 } from 'lucide-react';
+import { parseVendorAndRemark } from '../utils/export';
 
 interface PrintPurchaseOrderModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
 
   const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
+  const hasPricing = totalCost > 0;
   const [poNumber] = useState(() => `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
 
   const handlePrint = () => {
@@ -154,36 +156,74 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
                 <th className="py-2.5 px-2 text-center w-10">ល.រ</th>
                 <th className="py-2.5 px-3">លេខ Barcode</th>
                 <th className="py-2.5 px-3">ឈ្មោះទំនិញ (Description)</th>
-                <th className="py-2.5 px-3 text-center">ឯកតា</th>
-                <th className="py-2.5 px-3 text-center">ចំនួនទិញ</th>
-                <th className="py-2.5 px-3 text-right">តម្លៃដើម</th>
-                <th className="py-2.5 px-3 text-right">សរុប</th>
+                {hasPricing ? (
+                  <>
+                    <th className="py-2.5 px-3 text-center">ឯកតា</th>
+                    <th className="py-2.5 px-3 text-center">ចំនួនទិញ</th>
+                    <th className="py-2.5 px-3 text-right">តម្លៃដើម</th>
+                    <th className="py-2.5 px-3 text-right">សរុប</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="py-2.5 px-3">អ្នកផ្គត់ផ្គង់ (Vendor)</th>
+                    <th className="py-2.5 px-3 text-center">ឯកតាទិញ</th>
+                    <th className="py-2.5 px-3 text-center">ចំនួនត្រូវទិញ</th>
+                    <th className="py-2.5 px-3 text-center">កាលវិភាគ / សម្គាល់</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredItems.map((item, idx) => (
-                <tr key={item.id} className="print:break-inside-avoid">
-                  <td className="py-2 px-2 text-center text-slate-500 font-mono">{idx + 1}</td>
-                  <td className="py-2 px-3 font-mono text-[11px] text-slate-600">{item.product.barcode}</td>
-                  <td className="py-2 px-3">
-                    <p className="font-semibold text-slate-800">{item.product.name}</p>
-                    {item.product.khmerName && (
-                      <p className="text-[11px] text-slate-500">{item.product.khmerName}</p>
+              {filteredItems.map((item, idx) => {
+                const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
+                const finalRemark = remark || item.product.remark;
+                return (
+                  <tr key={item.id} className="print:break-inside-avoid">
+                    <td className="py-2 px-2 text-center text-slate-500 font-mono">{idx + 1}</td>
+                    <td className="py-2 px-3 font-mono text-[11px] text-slate-600">{item.product.barcode}</td>
+                    <td className="py-2 px-3">
+                      <p className="font-semibold text-slate-800">{item.product.name}</p>
+                      {item.product.khmerName && (
+                        <p className="text-[11px] text-slate-500">{item.product.khmerName}</p>
+                      )}
+                    </td>
+                    {hasPricing ? (
+                      <>
+                        <td className="py-2 px-3 text-center text-slate-600">{item.product.unit}</td>
+                        <td className="py-2 px-3 text-center font-bold text-blue-700">{item.orderQuantity}</td>
+                        <td className="py-2 px-3 text-right">${(item.unitCost || 0).toFixed(2)}</td>
+                        <td className="py-2 px-3 text-right font-bold text-slate-800">${(item.totalCost || 0).toFixed(2)}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 px-3 text-slate-700 font-medium">{vendor}</td>
+                        <td className="py-2 px-3 text-center font-semibold text-slate-700">{item.product.unit || 'Units'}</td>
+                        <td className="py-2 px-3 text-center font-bold text-blue-700 text-sm">{item.orderQuantity}</td>
+                        <td className="py-2 px-3 text-center text-slate-600">{finalRemark || '-'}</td>
+                      </>
                     )}
-                  </td>
-                  <td className="py-2 px-3 text-center text-slate-600">{item.product.unit}</td>
-                  <td className="py-2 px-3 text-center font-bold text-blue-700">{item.orderQuantity}</td>
-                  <td className="py-2 px-3 text-right">${(item.unitCost || 0).toFixed(2)}</td>
-                  <td className="py-2 px-3 text-right font-bold text-slate-800">${(item.totalCost || 0).toFixed(2)}</td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-800 font-bold text-slate-900">
-                <td colSpan={4} className="py-3 px-3 text-right text-xs">សរុបរួម:</td>
-                <td className="py-3 px-3 text-center text-blue-700 text-xs">{totalQty}</td>
-                <td></td>
-                <td className="py-3 px-3 text-right text-emerald-700 text-sm">${(totalCost || 0).toFixed(2)}</td>
+                {hasPricing ? (
+                  <>
+                    <td colSpan={4} className="py-3 px-3 text-right text-xs">សរុបរួម:</td>
+                    <td className="py-3 px-3 text-center text-blue-700 text-xs">{totalQty}</td>
+                    <td></td>
+                    <td className="py-3 px-3 text-right text-emerald-700 text-sm">${(totalCost || 0).toFixed(2)}</td>
+                  </>
+                ) : (
+                  <>
+                    <td colSpan={3} className="py-3 px-3 text-xs">សរុប ({filteredItems.length} មុខទំនិញ):</td>
+                    <td className="py-3 px-3 text-xs text-slate-600">{suppliers.length} ក្រុមហ៊ុន</td>
+                    <td></td>
+                    <td className="py-3 px-3 text-center text-blue-700 text-sm">{totalQty} ឯកតា</td>
+                    <td></td>
+                  </>
+                )}
               </tr>
             </tfoot>
           </table>

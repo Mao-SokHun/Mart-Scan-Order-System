@@ -193,9 +193,15 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
                   </div>
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <span className="text-xs font-bold text-slate-800">
-                      ${(prod.costPrice || 0).toFixed(2)}
-                    </span>
+                    {(prod.costPrice || 0) > 0 ? (
+                      <span className="text-xs font-bold text-slate-800">
+                        ${(prod.costPrice || 0).toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {prod.unit || 'Units'}
+                      </span>
+                    )}
                     <div className="flex items-center gap-1">
                       {onDeleteProduct && (
                         <button
