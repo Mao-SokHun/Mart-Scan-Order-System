@@ -156,6 +156,9 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
                       <img
                         src={prod.image}
                         alt={prod.name}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                         className="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-white shrink-0"
                       />
                     ) : (

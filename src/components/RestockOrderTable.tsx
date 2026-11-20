@@ -322,6 +322,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                       <img
                         src={item.product.image}
                         alt={item.product.name}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                         className="w-14 h-14 rounded-2xl object-cover border border-slate-200 bg-white shrink-0"
                       />
                     ) : (
@@ -517,6 +520,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                             <img
                               src={item.product.image}
                               alt={item.product.name}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                               className="w-10 h-10 rounded-xl object-cover border border-slate-200 bg-white shrink-0"
                             />
                           ) : (

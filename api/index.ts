@@ -584,6 +584,8 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
           unit = COALESCE(EXCLUDED.unit, products.unit),
           cost_price = EXCLUDED.cost_price,
           selling_price = EXCLUDED.selling_price,
+          current_stock = EXCLUDED.current_stock,
+          min_stock = EXCLUDED.min_stock,
           supplier_name = COALESCE(EXCLUDED.supplier_name, products.supplier_name),
           updated_at = CURRENT_TIMESTAMP;
       `, [

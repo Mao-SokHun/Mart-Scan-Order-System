@@ -28,6 +28,9 @@ export const useBarcodeGun = ({
   
   const bufferRef = useRef<string>('');
   const lastKeyTimeRef = useRef<number>(0);
+  const lastKeystrokeCharRef = useRef<string>('');
+  const lastKeystrokeTimeRef = useRef<number>(0);
+  const lastKeystrokeTargetRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const timerRef = useRef<number | null>(null);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
@@ -41,9 +44,11 @@ export const useBarcodeGun = ({
         setLastScanned(code);
         setIsReceivingGunInput(false);
         bufferRef.current = '';
+        lastKeystrokeCharRef.current = '';
         onScanRef.current(code);
       } else {
         bufferRef.current = '';
+        lastKeystrokeCharRef.current = '';
         setIsReceivingGunInput(false);
       }
     };
@@ -60,18 +65,13 @@ export const useBarcodeGun = ({
       const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
       const isBarcodeSpecificInput = target && target.getAttribute('data-barcode-input') === 'true';
 
-      // If user is human typing slowly in another input (like search box), let normal input handle it
-      if (isInput && !isBarcodeSpecificInput && timeDiff > maxDelayMs && bufferRef.current.length === 0) {
-        return;
-      }
-
       // Handle standard Scanner Terminator keys: Enter, Tab, or NumpadEnter
       if (e.key === 'Enter' || e.key === 'Tab') {
         if (bufferRef.current.length >= minChars) {
           e.preventDefault();
           e.stopPropagation();
 
-          // If focused on an input, blur it or clear it so barcode doesn't dirty the field
+          // If focused on an input, blur it so barcode doesn't dirty the field
           if (isInput && !isBarcodeSpecificInput && target instanceof HTMLInputElement) {
             target.blur();
           }
@@ -80,22 +80,61 @@ export const useBarcodeGun = ({
         } else {
           bufferRef.current = '';
         }
+        lastKeystrokeCharRef.current = '';
         return;
       }
 
       // Scanner sends single printable characters (numbers, letters, hyphens)
       if (e.key.length === 1) {
-        // If the gap between keys is longer than scanner speed, reset buffer (it was human typing)
-        if (timeDiff > maxDelayMs && bufferRef.current.length > 0) {
-          bufferRef.current = '';
+        // If we were already receiving rapid scanner gun input
+        if (bufferRef.current.length > 0) {
+          if (timeDiff <= maxDelayMs) {
+            bufferRef.current += e.key;
+            // Prevent scanner digits from leaking into focused inputs
+            if (isInput && !isBarcodeSpecificInput) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+            if (bufferRef.current.length >= 3) {
+              setIsReceivingGunInput(true);
+            }
+          } else {
+            // Gap was too long; reset buffer
+            bufferRef.current = '';
+            setIsReceivingGunInput(false);
+          }
+        } else {
+          // bufferRef is currently empty. Check if this keystroke is the second character of a scanner burst!
+          const timeSincePrev = currentTime - lastKeystrokeTimeRef.current;
+          if (timeSincePrev <= maxDelayMs && lastKeystrokeCharRef.current) {
+            // Machine speed burst detected!
+            bufferRef.current = lastKeystrokeCharRef.current + e.key;
+            setIsReceivingGunInput(true);
+
+            // If the first character leaked into a non-barcode input, clean it up and blur
+            if (lastKeystrokeTargetRef.current && lastKeystrokeTargetRef.current === target && !isBarcodeSpecificInput) {
+              e.preventDefault();
+              e.stopPropagation();
+              const inputEl = lastKeystrokeTargetRef.current;
+              if (inputEl.value.endsWith(lastKeystrokeCharRef.current)) {
+                inputEl.value = inputEl.value.slice(0, -lastKeystrokeCharRef.current.length);
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+              inputEl.blur();
+            }
+          } else {
+            // If normal background (not typing in another field), start buffer
+            if (!isInput || isBarcodeSpecificInput) {
+              bufferRef.current = e.key;
+            }
+          }
         }
 
-        bufferRef.current += e.key;
-
-        // Scanner guns type rapidly: if 3+ characters arrived under scanner latency, show indicator
-        if (bufferRef.current.length >= 3) {
-          setIsReceivingGunInput(true);
-        }
+        lastKeystrokeCharRef.current = e.key;
+        lastKeystrokeTimeRef.current = currentTime;
+        lastKeystrokeTargetRef.current = (isInput && !isBarcodeSpecificInput && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement))
+          ? target
+          : null;
 
         // Auto-complete fallback for scanners that have NO suffix (no Enter configured)
         if (timerRef.current) clearTimeout(timerRef.current);

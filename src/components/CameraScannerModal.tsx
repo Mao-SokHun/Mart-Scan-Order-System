@@ -164,11 +164,19 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         () => {} // Silent ignore of non-barcode frames
       );
 
-      // If user closed modal while camera was initializing, stop immediately
+      // If user closed modal while camera was initializing, stop immediately and release hardware tracks
       if (!isOpenRef.current) {
         try {
           if (html5QrCode.isScanning) await html5QrCode.stop();
           await html5QrCode.clear();
+        } catch {}
+        try {
+          const videoElem = document.querySelector(`#${readerElementId} video`) as HTMLVideoElement;
+          if (videoElem && videoElem.srcObject) {
+            const stream = videoElem.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            videoElem.srcObject = null;
+          }
         } catch {}
         return;
       }
