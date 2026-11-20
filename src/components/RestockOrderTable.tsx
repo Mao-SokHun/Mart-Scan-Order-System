@@ -4,7 +4,7 @@ import { OrderDay, getCurrentDayOfWeek } from '../utils/export';
 import { 
   Trash2, Plus, Minus, FileSpreadsheet, Printer, 
   Send, Search, Filter, ShoppingBag, AlertTriangle, 
-  Check, Phone, AlertCircle, Calendar 
+  Check, Phone, AlertCircle, Calendar, X 
 } from 'lucide-react';
 
 interface RestockOrderTableProps {
@@ -32,6 +32,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 }) => {
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterZeroOnly, setFilterZeroOnly] = useState<boolean>(false);
   const [orderDay, setOrderDay] = useState<OrderDay>(getCurrentDayOfWeek());
   const [copiedTelegram, setCopiedTelegram] = useState(false);
 
@@ -52,15 +53,16 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const filteredItems = items.filter(item => {
     const itemSupplier = (item.product.supplierName || 'ទូទៅ (General Supplier)').trim();
     const matchesSupplier = supplierFilter === 'all' || itemSupplier === supplierFilter;
+    const matchesZeroOnly = !filterZeroOnly || item.orderQuantity <= 0;
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return matchesSupplier;
+    if (!q) return matchesSupplier && matchesZeroOnly;
     const matchesSearch = 
       item.product.name.toLowerCase().includes(q) ||
       (item.product.khmerName && item.product.khmerName.toLowerCase().includes(q)) ||
       item.product.barcode.toLowerCase().includes(q) ||
       item.product.category.toLowerCase().includes(q) ||
       (item.product.supplierName && item.product.supplierName.toLowerCase().includes(q));
-    return matchesSupplier && matchesSearch;
+    return matchesSupplier && matchesZeroOnly && matchesSearch;
   });
 
   const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
@@ -142,13 +144,22 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
             </div>
 
             {zeroQtyCount > 0 ? (
-              <div className="bg-amber-50 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-amber-300 shadow-2xs animate-pulse">
-                <span className="text-[10px] sm:text-[11px] text-amber-700 block font-bold flex items-center gap-1">
-                  <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span>ចាំវាយចំនួន</span>
+              <button
+                type="button"
+                onClick={() => setFilterZeroOnly(!filterZeroOnly)}
+                title={filterZeroOnly ? 'ចុចដើម្បីបង្ហាញទំនិញទាំងអស់' : 'ចុចដើម្បីបង្ហាញតែទំនិញចាំវាយចំនួន'}
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border transition shadow-2xs text-left cursor-pointer active:scale-95 ${
+                  filterZeroOnly
+                    ? 'bg-amber-400 border-amber-500 text-slate-900 ring-2 ring-amber-300'
+                    : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900 animate-pulse'
+                }`}
+              >
+                <span className="text-[10px] sm:text-[11px] block font-bold flex items-center gap-1 text-amber-800">
+                  <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600" />
+                  <span>{filterZeroOnly ? 'កំពុងមើល: ចាំវាយចំនួន' : 'ចាំវាយចំនួន (ចុចមើល)'}</span>
                 </span>
-                <span className="text-xs sm:text-sm font-bold text-amber-900">{zeroQtyCount} មុខ</span>
-              </div>
+                <span className="text-xs sm:text-sm font-bold text-amber-950">{zeroQtyCount} មុខ</span>
+              </button>
             ) : (
               <div className="bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-200 shadow-2xs">
                 <span className="text-[10px] sm:text-[11px] text-slate-400 block font-medium">សរុបចំនួន</span>
@@ -174,8 +185,17 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 placeholder="ស្វែងរកក្នុងតារាង..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-xl sm:rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                className="w-full pl-8 pr-7 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-xl sm:rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Supplier Filter */}

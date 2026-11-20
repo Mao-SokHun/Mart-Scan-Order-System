@@ -42,7 +42,7 @@ export const App: React.FC = () => {
   const [isPrintPOOpen, setIsPrintPOOpen] = useState(false);
   const [isImportExcelOpen, setIsImportExcelOpen] = useState(false);
   const [notFoundBarcode, setNotFoundBarcode] = useState<string>('');
-  const [showTestSheet, setShowTestSheet] = useState(true);
+  const [showTestSheet, setShowTestSheet] = useState(false);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
 
   const handleOpenCamera = () => {
@@ -512,6 +512,53 @@ export const App: React.FC = () => {
             onSimulateScan={handleScan}
           />
         )}
+
+        {/* Quick Dashboard Stat Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4 sm:mb-6">
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">កំពុងកុម្ម៉ង់</span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-800">{restockItems.length} <span className="text-[11px] text-slate-400 font-normal">មុខ</span></span>
+            </div>
+          </div>
+
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">ចំនួនសរុប</span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-800">{restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} <span className="text-[11px] text-slate-400 font-normal">ឯកតា</span></span>
+            </div>
+          </div>
+
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">សរុបទឹកប្រាក់</span>
+              <span className="text-sm sm:text-base font-extrabold text-emerald-600">${(restockItems.reduce((a, c) => a + (c.totalCost || 0), 0) || 0).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => setIsCatalogOpen(true)}
+            className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3 cursor-pointer hover:border-blue-300 hover:shadow-xs transition group"
+            title="ចុចដើម្បីមើល ឬគ្រប់គ្រងទំនិញក្នុង Catalog"
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0 transition">
+              <Store className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">ទំនិញក្នុង Catalog</span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-800 group-hover:text-blue-600 transition">{products.length} <span className="text-[11px] text-slate-400 font-normal">មុខ</span></span>
+            </div>
+          </div>
+        </div>
 
         {/* Barcode Input Section */}
         <ManualBarcodeInput
