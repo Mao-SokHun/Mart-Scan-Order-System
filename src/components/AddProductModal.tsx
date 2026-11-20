@@ -5,7 +5,7 @@ import { X, PlusCircle, PackagePlus, AlertCircle } from 'lucide-react';
 interface AddProductModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (product: Product, addToOrderNow: boolean) => void;
+  onSave: (product: Product, addToOrderNow: boolean) => Promise<boolean> | boolean | void;
   initialBarcode?: string;
 }
 
@@ -27,6 +27,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [supplierName, setSupplierName] = useState('');
   const [supplierPhone, setSupplierPhone] = useState('');
   const [addToOrderNow, setAddToOrderNow] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const resetForm = () => {
     setName('');
@@ -39,6 +40,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setMinStock('24');
     setSupplierName('');
     setSupplierPhone('');
+    setIsSubmitting(false);
   };
 
   useEffect(() => {
@@ -56,19 +58,25 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!barcode.trim() || !name.trim()) return;
+    if (!barcode.trim() || !name.trim() || isSubmitting) return;
+
+    let cleanBarcode = barcode.trim();
+    if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
+
+    const parsedCost = Math.round(Math.max(0, parseFloat(costPrice) || 0) * 100) / 100;
+    const parsedSelling = Math.round(Math.max(0, parseFloat(sellingPrice) || 0) * 100) / 100;
 
     const newProd: Product = {
       id: `p-${Date.now()}`,
-      barcode: barcode.trim(),
+      barcode: cleanBarcode,
       name: name.trim(),
       khmerName: khmerName.trim() || undefined,
       category,
       unit,
-      costPrice: Math.max(0, parseFloat(costPrice) || 0),
-      sellingPrice: Math.max(0, parseFloat(sellingPrice) || 0),
+      costPrice: parsedCost,
+      sellingPrice: parsedSelling,
       currentStock: Math.max(0, parseInt(currentStock, 10) || 0),
       minStock: Math.max(0, parseInt(minStock, 10) || 10),
       supplierName: supplierName.trim() || 'ទូទៅ (General Supplier)',
@@ -76,9 +84,16 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop&q=80'
     };
 
-    onSave(newProd, addToOrderNow);
-    resetForm();
-    onClose();
+    setIsSubmitting(true);
+    try {
+      const res = await onSave(newProd, addToOrderNow);
+      if (res !== false) {
+        resetForm();
+        onClose();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -284,10 +299,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>រក្សាទុកទំនិញ</span>
+              <span>{isSubmitting ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកទំនិញ'}</span>
             </button>
           </div>
         </form>

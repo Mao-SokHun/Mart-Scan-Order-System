@@ -35,12 +35,12 @@ const parseVendorAndRemark = (supplierName: string): { vendor: string; remark: s
   if (match) {
     return {
       vendor: match[1].trim() || 'ទូទៅ',
-      remark: match[2].trim() || 'Delivery on Thu'
+      remark: match[2].trim() || ''
     };
   }
   return {
     vendor: raw.trim() || 'ទូទៅ',
-    remark: 'Delivery on Thu'
+    remark: ''
   };
 };
 

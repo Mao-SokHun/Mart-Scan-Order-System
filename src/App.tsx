@@ -153,7 +153,8 @@ export const App: React.FC = () => {
 
   // Handle Scanning Barcode (Used by both Barcode Gun & Camera Scanner & Manual Input)
   const handleScan = useCallback(async (scannedBarcode: string) => {
-    const cleanBarcode = scannedBarcode.replace(/[\r\n\t]/g, '').trim();
+    let cleanBarcode = scannedBarcode.replace(/[\r\n\t]/g, '').trim();
+    if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     if (!cleanBarcode) return;
 
     // If connected to Neon DB, perform scan through API
@@ -291,7 +292,7 @@ export const App: React.FC = () => {
   };
 
   // Save newly registered product
-  const handleSaveNewProduct = async (newProduct: Product, addToOrderNow: boolean) => {
+  const handleSaveNewProduct = async (newProduct: Product, addToOrderNow: boolean): Promise<boolean> => {
     let savedProd = newProduct;
 
     if (dbStatus.connected) {
@@ -299,13 +300,13 @@ export const App: React.FC = () => {
         savedProd = await api.createProduct(newProduct);
       } catch (err: any) {
         showToast(`បរាជ័យក្នុងការរក្សាទុកក្នុង DB: ${err.message}`, 'error');
-        return; // Halt if DB rejected (e.g. duplicate barcode)
+        return false; // Halt if DB rejected (e.g. duplicate barcode)
       }
     } else {
       const existsLocally = products.some(p => p.barcode.toLowerCase() === newProduct.barcode.toLowerCase());
       if (existsLocally) {
         showToast(`Barcode "${newProduct.barcode}" មានរួចហើយក្នុងប្រព័ន្ធ!`, 'error');
-        return;
+        return false;
       }
     }
 
@@ -337,6 +338,7 @@ export const App: React.FC = () => {
         api.scanBarcode(savedProd.barcode).catch(err => console.warn('Sync scan failed:', err));
       }
     }
+    return true;
   };
 
   // Delete product from catalog

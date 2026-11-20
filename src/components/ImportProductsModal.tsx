@@ -178,12 +178,18 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             row['ស្តុកអប្បបរមា'] || 10;
           const minStock = Math.max(1, Math.round(parseNum(rawMinStock, 10)));
 
-          // 8. Detect Supplier / Vendor
+          // 8. Detect Supplier / Vendor & Delivery Remark
           const rawSupplier = 
             row['Vendors/Vendor'] || row['Vendor'] || row['vendor'] || 
             row['Supplier'] || row['supplier'] || row['អ្នកផ្គត់ផ្គង់'] || 
             row['Supplier Name'] || 'ទូទៅ (General Supplier)';
-          const supplierName = String(rawSupplier).trim() || 'ទូទៅ (General Supplier)';
+          let supplierName = String(rawSupplier).trim() || 'ទូទៅ (General Supplier)';
+
+          const rawRemark = row['Remark'] || row['remark'] || row['កំណត់សម្គាល់'] || '';
+          const cleanRemark = String(rawRemark).trim();
+          if (cleanRemark && !supplierName.includes('[')) {
+            supplierName = `${supplierName} [${cleanRemark}]`;
+          }
 
           const rawPhone = 
             row['Phone'] || row['phone'] || row['Supplier Phone'] || 

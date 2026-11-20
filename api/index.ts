@@ -480,10 +480,15 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
       supplierName, supplierPhone, image
     } = req.body || {};
 
-    const existing = await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1;', [id]);
+    const existing = await pool.query(
+      'SELECT * FROM products WHERE id = $1 OR LOWER(TRIM(barcode)) = LOWER(TRIM($1)) LIMIT 1;',
+      [id]
+    );
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    const targetId = existing.rows[0].id;
 
     const result = await pool.query(`
       UPDATE products
@@ -513,7 +518,7 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
       supplierName ? String(supplierName).trim() : null,
       supplierPhone !== undefined ? (supplierPhone ? String(supplierPhone).trim() : null) : null,
       image !== undefined ? (image || null) : null,
-      id
+      targetId
     ]);
 
     res.json(mapProduct(result.rows[0]));

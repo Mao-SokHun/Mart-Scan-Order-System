@@ -90,10 +90,34 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
         <div className="p-8 sm:p-10 font-khmer text-slate-800 bg-white min-h-[500px]">
           {/* Invoice Header */}
           <div className="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{martName}</h1>
-              <p className="text-xs text-slate-500 mt-1">អាសយដ្ឋាន: {martAddress}</p>
-              <p className="text-xs text-slate-500">ទូរស័ព្ទ: {martPhone}</p>
+            <div className="flex-1 mr-4">
+              <input
+                type="text"
+                value={martName}
+                onChange={(e) => setMartName(e.target.value)}
+                className="text-2xl font-bold tracking-tight text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent w-full"
+                title="ចុចដើម្បីកែឈ្មោះហាង"
+              />
+              <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
+                <span className="shrink-0">អាសយដ្ឋាន:</span>
+                <input
+                  type="text"
+                  value={martAddress}
+                  onChange={(e) => setMartAddress(e.target.value)}
+                  className="border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent text-slate-600 flex-1"
+                  title="ចុចដើម្បីកែអាសយដ្ឋាន"
+                />
+              </div>
+              <div className="flex items-center gap-1 text-xs text-slate-500">
+                <span className="shrink-0">ទូរស័ព្ទ:</span>
+                <input
+                  type="text"
+                  value={martPhone}
+                  onChange={(e) => setMartPhone(e.target.value)}
+                  className="border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent text-slate-600 flex-1"
+                  title="ចុចដើម្បីកែលេខទូរស័ព្ទ"
+                />
+              </div>
             </div>
 
             <div className="text-right">
