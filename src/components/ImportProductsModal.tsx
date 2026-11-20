@@ -157,8 +157,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
           // 5. Detect Unit / Purchase UoM
           const rawUnit = 
             row['Purchase UoM'] || row['purchase uom'] || row['UoM'] || 
-            row['uom'] || row['Unit'] || row['unit'] || row['ឯកតា'] || row['Packing'] || 'កំប៉ុង';
-          const unit = String(rawUnit).trim() || 'កំប៉ុង';
+            row['uom'] || row['Unit'] || row['unit'] || row['ឯកតា'] || row['Packing'] || 'Units';
+          const unit = String(rawUnit).trim() || 'Units';
 
           // 6. Detect Cost & Selling Price
           const rawCost = 

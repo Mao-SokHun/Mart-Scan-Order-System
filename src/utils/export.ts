@@ -109,6 +109,7 @@ export const exportDailyPlanExcel = (
     const temp = extractStorageTemp(item.product.category, item.product.name);
     const sheet = extractSheetName(item.product.category);
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
+    const finalRemark = item.product.remark || remark;
 
     const row: Record<string, any> = {
       'Storage Temperature': temp,
@@ -124,7 +125,7 @@ export const exportDailyPlanExcel = (
       'Fri': orderDay === 'Fri' ? item.orderQuantity : '',
       'Sat': orderDay === 'Sat' ? item.orderQuantity : '',
       'Sun': orderDay === 'Sun' ? item.orderQuantity : '',
-      'Remark': remark
+      'Remark': finalRemark
     };
 
     if (sheetsData[sheet]) {
@@ -152,6 +153,7 @@ export const exportDailyPlanExcel = (
 
   const summaryRows = filteredItems.map((item, idx) => {
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
+    const finalRemark = item.product.remark || remark;
     return {
       'ល.រ': idx + 1,
       'កូដទំនិញ (Barcode)': item.product.barcode,
@@ -162,7 +164,7 @@ export const exportDailyPlanExcel = (
       'ឯកតា (Unit)': item.product.unit || 'Units',
       'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity,
       'ថ្ងៃកុម្ម៉ង់ (Order Day)': orderDay,
-      'Remark': remark
+      'Remark': finalRemark
     };
   });
 
@@ -345,11 +347,12 @@ export const copyToTelegramClipboard = async (
 
   filteredItems.forEach((item, idx) => {
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
+    const finalRemark = item.product.remark || remark;
     const safeName = cleanTg(item.product.name);
     const safeKhmer = cleanTg(item.product.khmerName);
     const safeVendor = cleanTg(vendor);
     const safeUnit = cleanTg(item.product.unit || 'Units');
-    const safeRemark = cleanTg(remark);
+    const safeRemark = cleanTg(finalRemark);
 
     text += `${idx + 1}. *${safeName}*\n`;
     if (safeKhmer) text += `   (${safeKhmer})\n`;

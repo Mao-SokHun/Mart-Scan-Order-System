@@ -19,6 +19,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [name, setName] = useState('');
   const [khmerName, setKhmerName] = useState('');
   const [category, setCategory] = useState('ទំនិញប្រចាំថ្ងៃ (Daily)');
+  const [storageTemp, setStorageTemp] = useState<'Dry' | 'Chilled' | 'Frozen'>('Dry');
   const [unit, setUnit] = useState('កំប៉ុង');
   const [costPrice] = useState('0');
   const [sellingPrice] = useState('0');
@@ -33,6 +34,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setName('');
     setKhmerName('');
     setCategory('ទំនិញប្រចាំថ្ងៃ (Daily)');
+    setStorageTemp('Dry');
     setUnit('កំប៉ុង');
     setCurrentStock('0');
     setMinStock('24');
@@ -65,13 +67,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
     const parsedCost = Math.round(Math.max(0, parseFloat(costPrice) || 0) * 100) / 100;
     const parsedSelling = Math.round(Math.max(0, parseFloat(sellingPrice) || 0) * 100) / 100;
+    const finalCategory = `${category} (${storageTemp})`;
 
     const newProd: Product = {
       id: `p-${Date.now()}`,
       barcode: cleanBarcode,
       name: name.trim(),
       khmerName: khmerName.trim() || undefined,
-      category,
+      category: finalCategory,
       unit,
       costPrice: parsedCost,
       sellingPrice: parsedSelling,
@@ -167,9 +170,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">ប្រភេទ (Category)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">ផ្នែក (Department)</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -194,13 +197,25 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </select>
             </div>
             <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">សីតុណ្ហភាព (Temp)</label>
+              <select
+                value={storageTemp}
+                onChange={(e) => setStorageTemp(e.target.value as any)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 font-medium"
+              >
+                <option value="Dry">Dry (ស្ងួត/ធម្មតា)</option>
+                <option value="Chilled">Chilled (ត្រជាក់/ក្លាស្សេ)</option>
+                <option value="Frozen">Frozen (កក)</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">ឯកតារាប់ (Unit)</label>
               <input
                 type="text"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                placeholder="កំប៉ុង, ដប, កញ្ចប់..."
+                placeholder="Units, កំប៉ុង, ដប, កញ្ចប់..."
               />
             </div>
           </div>
