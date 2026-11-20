@@ -56,7 +56,7 @@ export const exportDailyPlanExcel = (
   if (items.length === 0) return false;
 
   const filteredItems = supplierFilter && supplierFilter !== 'all'
-    ? items.filter(i => i.product.supplierName === supplierFilter)
+    ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
     : items;
 
   if (filteredItems.length === 0) return false;
@@ -275,7 +275,7 @@ export const exportToSimplePOExcel = (items: RestockItem[], supplierFilter?: str
   if (items.length === 0) return false;
 
   const filteredItems = supplierFilter && supplierFilter !== 'all'
-    ? items.filter(i => i.product.supplierName === supplierFilter)
+    ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
     : items;
 
   if (filteredItems.length === 0) return false;
@@ -352,7 +352,7 @@ export const copyToTelegramClipboard = async (
   if (items.length === 0) return false;
 
   const filteredItems = supplierFilter && supplierFilter !== 'all'
-    ? items.filter(i => i.product.supplierName === supplierFilter)
+    ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
     : items;
 
   if (filteredItems.length === 0) return false;
@@ -366,20 +366,28 @@ export const copyToTelegramClipboard = async (
     dateStr = new Date().toLocaleDateString();
   }
 
+  const cleanTg = (str?: string) => (str || '').replace(/[*_`]/g, ' ').trim();
+
   let text = `📦 *តារាងបញ្ជាទិញទំនិញ (Daily Order Plan)*\n`;
   text += `📅 កាលបរិច្ឆេទ: ${dateStr} (ថ្ងៃ ${orderDay})\n`;
   if (supplierFilter && supplierFilter !== 'all') {
-    text += `🏢 អ្នកផ្គត់ផ្គង់: *${supplierFilter}*\n`;
+    text += `🏢 អ្នកផ្គត់ផ្គង់: *${cleanTg(supplierFilter)}*\n`;
   }
   text += `------------------------------------\n`;
 
   filteredItems.forEach((item, idx) => {
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
-    text += `${idx + 1}. *${item.product.name}*\n`;
-    if (item.product.khmerName) text += `   (${item.product.khmerName})\n`;
-    text += `   🏷 Code: \`${item.product.barcode}\` | Vendor: ${vendor}\n`;
-    text += `   🔢 ចំនួនត្រូវទិញ [${orderDay}]: *${item.orderQuantity} ${item.product.unit}*\n`;
-    if (remark) text += `   🚚 ${remark}\n`;
+    const safeName = cleanTg(item.product.name);
+    const safeKhmer = cleanTg(item.product.khmerName);
+    const safeVendor = cleanTg(vendor);
+    const safeUnit = cleanTg(item.product.unit || 'Units');
+    const safeRemark = cleanTg(remark);
+
+    text += `${idx + 1}. *${safeName}*\n`;
+    if (safeKhmer) text += `   (${safeKhmer})\n`;
+    text += `   🏷 Code: \`${item.product.barcode}\` | Vendor: ${safeVendor}\n`;
+    text += `   🔢 ចំនួនត្រូវទិញ [${orderDay}]: *${item.orderQuantity}* ${safeUnit}\n`;
+    if (safeRemark) text += `   🚚 ${safeRemark}\n`;
   });
 
   text += `------------------------------------\n`;

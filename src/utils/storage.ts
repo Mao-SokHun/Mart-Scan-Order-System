@@ -27,8 +27,17 @@ export const getStoredProducts = (): Product[] => {
 export const saveProducts = (products: Product[]) => {
   try {
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-  } catch (e) {
+  } catch (e: any) {
     console.error('Error saving products:', e);
+    // If quota exceeded, strip heavy images and try again so barcodes and essential product data are saved
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
+      try {
+        const lean = products.map(({ image, ...rest }) => rest);
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(lean));
+      } catch (inner) {
+        console.warn('Could not save lean products to localStorage:', inner);
+      }
+    }
   }
 };
 

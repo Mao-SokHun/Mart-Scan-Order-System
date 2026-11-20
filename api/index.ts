@@ -390,6 +390,8 @@ app.get('/api/products', async (req: Request, res: Response) => {
         WHERE LOWER(barcode) LIKE $1 
            OR LOWER(name) LIKE $1 
            OR LOWER(COALESCE(khmer_name, '')) LIKE $1
+           OR LOWER(COALESCE(category, '')) LIKE $1
+           OR LOWER(COALESCE(supplier_name, '')) LIKE $1
         ORDER BY name ASC
         LIMIT $2 OFFSET $3;
       `, [q, limit, offset]);
@@ -407,7 +409,8 @@ app.get('/api/products', async (req: Request, res: Response) => {
 app.get('/api/products/barcode/:barcode', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.params;
-    const cleanBarcode = String(barcode || '').trim();
+    let cleanBarcode = String(barcode || '').trim();
+    if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     if (!cleanBarcode) {
       return res.status(400).json({ error: 'Barcode is required' });
     }
@@ -434,7 +437,8 @@ app.post('/api/products', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Barcode and Name are required' });
     }
 
-    const cleanBarcode = String(barcode).trim();
+    let cleanBarcode = String(barcode).trim();
+    if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     const cleanName = String(name).trim();
 
     // Check if barcode already exists (case-insensitive)
@@ -457,11 +461,18 @@ app.post('/api/products', async (req: Request, res: Response) => {
     `, [
       id, cleanBarcode, cleanName, khmerName ? String(khmerName).trim() : null,
       category ? String(category).trim() : 'ផ្សេងៗ (Other)', unit ? String(unit).trim() : 'កំប៉ុង',
-      Math.max(0, safeFloat(costPrice, 0)), Math.max(0, safeFloat(sellingPrice, 0)),
+      roundMoney(Math.max(0, safeFloat(costPrice, 0))), roundMoney(Math.max(0, safeFloat(sellingPrice, 0))),
       Math.max(0, safeInt(currentStock, 0)), Math.max(0, safeInt(minStock, 10)),
       supplierName ? String(supplierName).trim() : 'ទូទៅ (General Supplier)', supplierPhone ? String(supplierPhone).trim() : null,
       image || null
     ]);
+
+    res.status(201).json(mapProduct(result.rows[0]));
+  } catch (err: any) {
+    console.error('Error creating product:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
     res.status(201).json(mapProduct(result.rows[0]));
   } catch (err: any) {
@@ -535,7 +546,7 @@ app.delete('/api/products/:id', async (req: Request, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    res.json({ success: true, deletedId: id });
+    res.json({ success: true, deletedId: result.rows[0].id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -630,7 +641,8 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Barcode is required' });
     }
 
-    const cleanBarcode = String(barcode).trim();
+    let cleanBarcode = String(barcode).trim();
+    if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
 
     // 1. Find product (case-insensitive for barcode matching)
     const prodRes = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);

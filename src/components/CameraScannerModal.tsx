@@ -34,7 +34,8 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
   // Handle successful scan
   const handleBarcodeDecoded = useCallback((decodedText: string) => {
-    const cleanCode = decodedText.trim();
+    let cleanCode = decodedText.trim();
+    if (cleanCode.endsWith('.0')) cleanCode = cleanCode.slice(0, -2);
     if (!cleanCode) return;
 
     const now = Date.now();
