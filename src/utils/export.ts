@@ -1,7 +1,311 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { RestockItem } from '../types';
 
 export type OrderDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+
+// Golden Yellow Header Style matching Takeo Daily Plan exactly (#FFC000)
+const TAKEO_HEADER_STYLE = {
+  fill: {
+    fgColor: { rgb: 'FFC000' },
+    patternType: 'solid'
+  },
+  font: {
+    name: 'Calibri',
+    sz: 11,
+    bold: true,
+    color: { rgb: '000000' }
+  },
+  alignment: {
+    vertical: 'center',
+    horizontal: 'center',
+    wrapText: true
+  },
+  border: {
+    top: { style: 'thin', color: { rgb: '000000' } },
+    bottom: { style: 'thin', color: { rgb: '000000' } },
+    left: { style: 'thin', color: { rgb: '000000' } },
+    right: { style: 'thin', color: { rgb: '000000' } }
+  }
+};
+
+const BORDER_THIN = {
+  top: { style: 'thin', color: { rgb: 'D9D9D9' } },
+  bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
+  left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+  right: { style: 'thin', color: { rgb: 'D9D9D9' } }
+};
+
+const BORDER_SUBTOTAL = {
+  top: { style: 'thin', color: { rgb: '000000' } },
+  bottom: { style: 'double', color: { rgb: '000000' } },
+  left: { style: 'thin', color: { rgb: '000000' } },
+  right: { style: 'thin', color: { rgb: '000000' } }
+};
+
+// Vendor badge style helper matching Takeo Store coloring
+const getVendorBadgeStyle = (vendor: string) => {
+  const v = (vendor || '').trim().toUpperCase();
+  if (v === 'MF') {
+    return {
+      fill: { fgColor: { rgb: 'FF0000' }, patternType: 'solid' },
+      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: BORDER_THIN
+    };
+  }
+  if (v === 'SM') {
+    return {
+      fill: { fgColor: { rgb: 'C5E0B4' }, patternType: 'solid' },
+      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '000000' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: BORDER_THIN
+    };
+  }
+  if (v === 'NINJA') {
+    return {
+      fill: { fgColor: { rgb: 'F8CBAD' }, patternType: 'solid' },
+      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '000000' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: BORDER_THIN
+    };
+  }
+  if (v === 'W&M') {
+    return {
+      fill: { fgColor: { rgb: 'FFE699' }, patternType: 'solid' },
+      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '000000' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: BORDER_THIN
+    };
+  }
+  if (v.startsWith('FF')) {
+    return {
+      fill: { fgColor: { rgb: 'DEEBF7' }, patternType: 'solid' },
+      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '000000' } },
+      alignment: { vertical: 'center', horizontal: 'center' },
+      border: BORDER_THIN
+    };
+  }
+  return {
+    font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '000000' } },
+    alignment: { vertical: 'center', horizontal: 'center' },
+    border: BORDER_THIN
+  };
+};
+
+/**
+ * Apply full Takeo store styles to a 14-column Department Worksheet
+ */
+const styleDepartmentWorksheet = (ws: any, hasSubtotal: boolean = true) => {
+  if (!ws || !ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+
+  const rowHeights = [{ hpt: 37, hpx: 37 }];
+  for (let r = 1; r <= range.e.r; r++) {
+    rowHeights.push({
+      hpt: (hasSubtotal && r === range.e.r) ? 22 : 20,
+      hpx: (hasSubtotal && r === range.e.r) ? 22 : 20
+    });
+  }
+  ws['!rows'] = rowHeights;
+  ws['!autofilter'] = { ref: ws['!ref'] };
+
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    const isHeader = R === 0;
+    const isSubtotal = hasSubtotal && R === range.e.r;
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[cellAddress]) {
+        ws[cellAddress] = { t: 's', v: '' };
+      }
+      const cell = ws[cellAddress];
+
+      if (isHeader) {
+        cell.s = TAKEO_HEADER_STYLE;
+      } else if (isSubtotal) {
+        const isQtyCol = C >= 6 && C <= 12; // Mon..Sun
+        cell.s = {
+          fill: { fgColor: { rgb: isQtyCol && cell.v ? 'C5E0B4' : 'F2F2F2' }, patternType: 'solid' },
+          font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+          alignment: {
+            vertical: 'center',
+            horizontal: C === 2 ? 'left' : (isQtyCol ? 'center' : 'left'),
+            wrapText: true
+          },
+          border: BORDER_SUBTOTAL
+        };
+      } else {
+        // Data row
+        // C: 0=Storage Temp, 1=Item Code, 2=Name, 3=Khmer Name, 4=Vendor, 5=Purchase UoM, 6..12=Mon..Sun, 13=Remark
+        if (C === 4) {
+          cell.s = getVendorBadgeStyle(cell.v);
+        } else if (C >= 6 && C <= 12) {
+          const hasQty = cell.v !== undefined && cell.v !== null && cell.v !== '' && Number(cell.v) > 0;
+          cell.s = {
+            fill: hasQty ? { fgColor: { rgb: 'C5E0B4' }, patternType: 'solid' } : undefined,
+            font: { name: 'Calibri', sz: 11, bold: hasQty, color: { rgb: hasQty ? '002060' : '000000' } },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: BORDER_THIN
+          };
+        } else if (C === 0 || C === 1 || C === 5) {
+          cell.s = {
+            font: { name: 'Calibri', sz: 11 },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: BORDER_THIN
+          };
+        } else {
+          cell.s = {
+            font: { name: 'Calibri', sz: 11 },
+            alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+            border: BORDER_THIN
+          };
+        }
+      }
+    }
+  }
+};
+
+/**
+ * Apply styling to the PO Summary Worksheet
+ */
+const styleSummaryWorksheet = (ws: any, hasGrandTotal: boolean = true) => {
+  if (!ws || !ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+
+  const rowHeights = [{ hpt: 37, hpx: 37 }];
+  for (let r = 1; r <= range.e.r; r++) {
+    rowHeights.push({
+      hpt: (hasGrandTotal && r === range.e.r) ? 22 : 20,
+      hpx: (hasGrandTotal && r === range.e.r) ? 22 : 20
+    });
+  }
+  ws['!rows'] = rowHeights;
+  ws['!autofilter'] = { ref: ws['!ref'] };
+
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    const isHeader = R === 0;
+    const isTotal = hasGrandTotal && R === range.e.r;
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[cellAddress]) {
+        ws[cellAddress] = { t: 's', v: '' };
+      }
+      const cell = ws[cellAddress];
+
+      if (isHeader) {
+        cell.s = TAKEO_HEADER_STYLE;
+      } else if (isTotal) {
+        const isQtyCol = C === 7; // ចំនួនត្រូវទិញ (Order Qty)
+        cell.s = {
+          fill: { fgColor: { rgb: isQtyCol ? 'C5E0B4' : 'F2F2F2' }, patternType: 'solid' },
+          font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+          alignment: {
+            vertical: 'center',
+            horizontal: (C === 2 || C === 3) ? 'left' : 'center',
+            wrapText: true
+          },
+          border: BORDER_SUBTOTAL
+        };
+      } else {
+        // Data row
+        // C: 0=No, 1=Barcode, 2=Name, 3=Khmer Name, 4=Dept, 5=Vendor, 6=Unit, 7=Order Qty, 8=Order Day, 9=Remark
+        if (C === 5) {
+          cell.s = getVendorBadgeStyle(cell.v);
+        } else if (C === 7) {
+          cell.s = {
+            fill: { fgColor: { rgb: 'C5E0B4' }, patternType: 'solid' },
+            font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '002060' } },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: BORDER_THIN
+          };
+        } else if (C === 0 || C === 1 || C === 4 || C === 6 || C === 8) {
+          cell.s = {
+            font: { name: 'Calibri', sz: 11 },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: BORDER_THIN
+          };
+        } else {
+          cell.s = {
+            font: { name: 'Calibri', sz: 11 },
+            alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+            border: BORDER_THIN
+          };
+        }
+      }
+    }
+  }
+};
+
+/**
+ * Apply styling to Simple PO Worksheet
+ */
+const styleSimplePOWorksheet = (ws: any, hasGrandTotal: boolean = true) => {
+  if (!ws || !ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+
+  const rowHeights = [{ hpt: 37, hpx: 37 }];
+  for (let r = 1; r <= range.e.r; r++) {
+    rowHeights.push({
+      hpt: (hasGrandTotal && r === range.e.r) ? 22 : 20,
+      hpx: (hasGrandTotal && r === range.e.r) ? 22 : 20
+    });
+  }
+  ws['!rows'] = rowHeights;
+  ws['!autofilter'] = { ref: ws['!ref'] };
+
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    const isHeader = R === 0;
+    const isTotal = hasGrandTotal && R === range.e.r;
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[cellAddress]) {
+        ws[cellAddress] = { t: 's', v: '' };
+      }
+      const cell = ws[cellAddress];
+
+      if (isHeader) {
+        cell.s = TAKEO_HEADER_STYLE;
+      } else if (isTotal) {
+        const isQtyCol = C === 6; // ចំនួនត្រូវទិញ (Order Qty)
+        cell.s = {
+          fill: { fgColor: { rgb: isQtyCol ? 'C5E0B4' : 'F2F2F2' }, patternType: 'solid' },
+          font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+          alignment: {
+            vertical: 'center',
+            horizontal: (C === 2 || C === 3) ? 'left' : 'center',
+            wrapText: true
+          },
+          border: BORDER_SUBTOTAL
+        };
+      } else {
+        // Data row
+        // C: 0=No, 1=Barcode, 2=Name, 3=Khmer Name, 4=Cat, 5=Unit, 6=Order Qty, 7=Supplier, 8=Phone, 9=Time
+        if (C === 6) {
+          cell.s = {
+            fill: { fgColor: { rgb: 'C5E0B4' }, patternType: 'solid' },
+            font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '002060' } },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: BORDER_THIN
+          };
+        } else if (C === 0 || C === 1 || C === 5 || C === 8 || C === 9) {
+          cell.s = {
+            font: { name: 'Calibri', sz: 11 },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: BORDER_THIN
+          };
+        } else {
+          cell.s = {
+            font: { name: 'Calibri', sz: 11 },
+            alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+            border: BORDER_THIN
+          };
+        }
+      }
+    }
+  }
+};
 
 // Helper to determine today's day of week
 export const getCurrentDayOfWeek = (): OrderDay => {
@@ -146,7 +450,48 @@ export const exportDailyPlanExcel = (
 
   const workbook = XLSX.utils.book_new();
 
-  // 1. ADD SUMMARY SHEET: All ordered products in one clean sheet
+  // 1. ADD DEPARTMENT SHEETS FIRST (matching Store Daily Plan layout: 'Daily' is Sheet 1)
+  const sheetOrder = ['Daily', 'Bakery and Cake', 'Fresh', ' Milk and Yogurt'];
+  for (const sheetName of sheetOrder) {
+    const rows = sheetsData[sheetName] || [];
+    if (rows.length > 0) {
+      // Add sheet subtotal row
+      const sheetQty = rows.reduce((acc, r) => acc + (parseInt(r[orderDay], 10) || 0), 0);
+
+      const rowsWithSubtotal = [
+        ...rows,
+        {
+          'Storage Temperature': '',
+          'Item Code': '',
+          'Name': `សរុបផ្នែក ${sheetName.trim()} (${rows.length} មុខ)`,
+          'Name in Khmer': '',
+          'Vendors/Vendor': '',
+          'Purchase UoM': '',
+          'Mon': orderDay === 'Mon' ? sheetQty : '',
+          'Tue': orderDay === 'Tue' ? sheetQty : '',
+          'Wed': orderDay === 'Wed' ? sheetQty : '',
+          'Thu': orderDay === 'Thu' ? sheetQty : '',
+          'Fri': orderDay === 'Fri' ? sheetQty : '',
+          'Sat': orderDay === 'Sat' ? sheetQty : '',
+          'Sun': orderDay === 'Sun' ? sheetQty : '',
+          'Remark': ''
+        }
+      ];
+
+      const ws = XLSX.utils.json_to_sheet(rowsWithSubtotal, { header: headers });
+      ws['!cols'] = colWidths;
+      styleDepartmentWorksheet(ws, true);
+      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+    } else {
+      // Keep sheet with headers so all department tabs exist in template
+      const ws = XLSX.utils.json_to_sheet([], { header: headers });
+      ws['!cols'] = colWidths;
+      styleDepartmentWorksheet(ws, false);
+      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+    }
+  }
+
+  // 2. ADD SUMMARY SHEET AS SHEET 5: All ordered products in one clean sheet
   const summaryHeaders = [
     'ល.រ',
     'កូដទំនិញ (Barcode)',
@@ -205,46 +550,8 @@ export const exportDailyPlanExcel = (
     { wch: 14 }, // Order Day
     { wch: 24 }  // Remark
   ];
+  styleSummaryWorksheet(wsSummary, true);
   XLSX.utils.book_append_sheet(workbook, wsSummary, 'បញ្ជីទិញសរុប (PO Summary)');
-
-  // 2. ADD DEPARTMENT SHEETS matching Store Daily Plan structure (always include all 4 tabs)
-  const sheetOrder = ['Daily', 'Bakery and Cake', 'Fresh', ' Milk and Yogurt'];
-  for (const sheetName of sheetOrder) {
-    const rows = sheetsData[sheetName] || [];
-    if (rows.length > 0) {
-      // Add sheet subtotal row
-      const sheetQty = rows.reduce((acc, r) => acc + (parseInt(r[orderDay], 10) || 0), 0);
-
-      const rowsWithSubtotal = [
-        ...rows,
-        {
-          'Storage Temperature': '',
-          'Item Code': '',
-          'Name': `សរុបផ្នែក ${sheetName.trim()} (${rows.length} មុខ)`,
-          'Name in Khmer': '',
-          'Vendors/Vendor': '',
-          'Purchase UoM': '',
-          'Mon': orderDay === 'Mon' ? sheetQty : '',
-          'Tue': orderDay === 'Tue' ? sheetQty : '',
-          'Wed': orderDay === 'Wed' ? sheetQty : '',
-          'Thu': orderDay === 'Thu' ? sheetQty : '',
-          'Fri': orderDay === 'Fri' ? sheetQty : '',
-          'Sat': orderDay === 'Sat' ? sheetQty : '',
-          'Sun': orderDay === 'Sun' ? sheetQty : '',
-          'Remark': ''
-        }
-      ];
-
-      const ws = XLSX.utils.json_to_sheet(rowsWithSubtotal, { header: headers });
-      ws['!cols'] = colWidths;
-      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
-    } else {
-      // Keep sheet with headers so all department tabs exist in template
-      const ws = XLSX.utils.json_to_sheet([], { header: headers });
-      ws['!cols'] = colWidths;
-      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
-    }
-  }
 
   const dateStr = new Date().toISOString().split('T')[0];
   const filename = `Daily_Order_Plan_${orderDay}_${dateStr}.xlsx`;
@@ -302,9 +609,6 @@ export const exportToSimplePOExcel = (items: RestockItem[], supplierFilter?: str
   });
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'បញ្ជីទំនិញត្រូវទិញ');
-
   worksheet['!cols'] = [
     { wch: 8 },  // No
     { wch: 18 }, // Barcode
@@ -317,6 +621,10 @@ export const exportToSimplePOExcel = (items: RestockItem[], supplierFilter?: str
     { wch: 16 }, // Phone
     { wch: 20 }, // Time
   ];
+  styleSimplePOWorksheet(worksheet, true);
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'បញ្ជីទំនិញត្រូវទិញ');
 
   const dateStr = new Date().toISOString().split('T')[0];
   const filename = `PO_Order_List_${dateStr}.xlsx`;
