@@ -36,12 +36,17 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const [orderDay, setOrderDay] = useState<OrderDay>(getCurrentDayOfWeek());
   const [copiedTelegram, setCopiedTelegram] = useState(false);
 
-  // Auto-scroll to newly scanned or duplicate scanned item
+  // Auto-scroll to newly scanned or duplicate scanned item (Works across both mobile and desktop views)
   React.useEffect(() => {
     if (highlightedItemId) {
-      const elem = document.getElementById(`restock-item-${highlightedItemId}`);
+      const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+      const targetId = isDesktop 
+        ? `restock-item-desktop-${highlightedItemId}` 
+        : `restock-item-mobile-${highlightedItemId}`;
+      const elem = document.getElementById(targetId) || 
+                   document.getElementById(`restock-item-${highlightedItemId}`);
       if (elem) {
-        elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
   }, [highlightedItemId]);
@@ -49,19 +54,29 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   // Extract unique clean suppliers
   const suppliers = Array.from(new Set(items.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean);
 
-  // Filter items
+  // Multi-term smart filter for item search & supplier filter
   const filteredItems = items.filter(item => {
     const itemSupplier = (item.product.supplierName || 'ទូទៅ (General Supplier)').trim();
     const matchesSupplier = supplierFilter === 'all' || itemSupplier === supplierFilter;
     const matchesZeroOnly = !filterZeroOnly || item.orderQuantity <= 0;
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return matchesSupplier && matchesZeroOnly;
-    const matchesSearch = 
-      item.product.name.toLowerCase().includes(q) ||
-      (item.product.khmerName && item.product.khmerName.toLowerCase().includes(q)) ||
-      item.product.barcode.toLowerCase().includes(q) ||
-      item.product.category.toLowerCase().includes(q) ||
-      (item.product.supplierName && item.product.supplierName.toLowerCase().includes(q));
+    const cleanQ = searchQuery.toLowerCase().trim().replace(/\.0$/, '');
+    if (!cleanQ) return matchesSupplier && matchesZeroOnly;
+
+    const terms = cleanQ.split(/\s+/).filter(Boolean);
+    const prodBarcode = (item.product.barcode || '').toLowerCase().replace(/\.0$/, '');
+    const prodName = (item.product.name || '').toLowerCase();
+    const prodKhmer = (item.product.khmerName || '').toLowerCase();
+    const prodCategory = (item.product.category || '').toLowerCase();
+    const prodSupplier = itemSupplier.toLowerCase();
+
+    const matchesSearch = terms.every(term => 
+      prodName.includes(term) ||
+      prodKhmer.includes(term) ||
+      prodBarcode.includes(term) ||
+      prodCategory.includes(term) ||
+      prodSupplier.includes(term)
+    );
+
     return matchesSupplier && matchesZeroOnly && matchesSearch;
   });
 
@@ -326,7 +341,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               return (
                 <div
                   key={item.id}
-                  id={`restock-item-${item.id}`}
+                  id={`restock-item-mobile-${item.id}`}
                   className={`p-3.5 transition-all duration-300 ${
                     isHighlighted
                       ? 'bg-amber-100/90 ring-2 ring-amber-400'
@@ -429,6 +444,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                           value={item.orderQuantity === 0 ? '' : item.orderQuantity}
                           onFocus={(e) => e.target.select()}
                           onKeyDown={(e) => {
+                            if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                           }}
                           onChange={(e) => {
@@ -519,7 +535,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                   return (
                     <tr 
                       key={item.id} 
-                      id={`restock-item-${item.id}`}
+                      id={`restock-item-desktop-${item.id}`}
                       className={`transition-all duration-300 ${
                         isHighlighted 
                           ? 'bg-amber-100/90 ring-2 ring-amber-400' 
@@ -636,6 +652,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                               value={item.orderQuantity === 0 ? '' : item.orderQuantity}
                               onFocus={(e) => e.target.select()}
                               onKeyDown={(e) => {
+                                if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
                                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                               }}
                               onChange={(e) => {

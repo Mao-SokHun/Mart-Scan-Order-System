@@ -43,13 +43,24 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   const filtered = products.filter(p => {
     const cat = (p.category || 'ផ្សេងៗ (Other)').trim();
     const matchesCat = selectedCategory === 'all' || cat === selectedCategory;
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return matchesCat;
-    const matchesSearch = 
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.khmerName && p.khmerName.toLowerCase().includes(q)) ||
-      (p.barcode || '').toLowerCase().includes(q) ||
-      (p.supplierName && p.supplierName.toLowerCase().includes(q));
+    const cleanQ = searchQuery.toLowerCase().trim().replace(/\.0$/, '');
+    if (!cleanQ) return matchesCat;
+
+    const terms = cleanQ.split(/\s+/).filter(Boolean);
+    const prodBarcode = (p.barcode || '').toLowerCase().replace(/\.0$/, '');
+    const prodName = (p.name || '').toLowerCase();
+    const prodKhmer = (p.khmerName || '').toLowerCase();
+    const prodSupplier = (p.supplierName || '').toLowerCase();
+    const prodCategory = cat.toLowerCase();
+
+    const matchesSearch = terms.every(term => 
+      prodName.includes(term) ||
+      prodKhmer.includes(term) ||
+      prodBarcode.includes(term) ||
+      prodSupplier.includes(term) ||
+      prodCategory.includes(term)
+    );
+
     return matchesCat && matchesSearch;
   });
 

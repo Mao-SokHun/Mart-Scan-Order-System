@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, RestockItem } from './types';
 import { api, HealthStatus } from './services/api';
 import { 
@@ -45,6 +45,10 @@ export const App: React.FC = () => {
   const [showTestSheet, setShowTestSheet] = useState(false);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
 
+  // References for debouncing keystrokes on quantities to prevent race conditions
+  const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const pendingUpdatesRef = useRef<Map<string, number>>(new Map());
+
   const handleOpenCamera = () => {
     sound.warmup();
     setIsCameraOpen(true);
@@ -90,8 +94,18 @@ export const App: React.FC = () => {
             if (loc.id) localMap.set(loc.id, loc);
           }
 
-          // Merge db items with offline local overrides
+          // Merge db items with offline local overrides and active user keystrokes
           const merged: RestockItem[] = dbRestock.map(dbItem => {
+            // If user is actively typing a quantity for this item, preserve active input
+            if (pendingUpdatesRef.current.has(dbItem.id)) {
+              const pendingQty = pendingUpdatesRef.current.get(dbItem.id)!;
+              return { ...dbItem, orderQuantity: pendingQty };
+            }
+            if (pendingUpdatesRef.current.has(dbItem.product.id)) {
+              const pendingQty = pendingUpdatesRef.current.get(dbItem.product.id)!;
+              return { ...dbItem, orderQuantity: pendingQty };
+            }
+
             const locItem = localMap.get(dbItem.product.id) || localMap.get(dbItem.id);
             if (locItem) {
               // If user modified quantity or details locally while offline, preserve local edits
@@ -154,6 +168,9 @@ export const App: React.FC = () => {
     return () => {
       window.removeEventListener('online', handleOnline);
       clearInterval(interval);
+      debounceTimersRef.current.forEach(timer => clearTimeout(timer));
+      debounceTimersRef.current.clear();
+      pendingUpdatesRef.current.clear();
     };
   }, [loadDataFromDatabase]);
 
@@ -253,13 +270,16 @@ export const App: React.FC = () => {
     enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen && !isImportExcelOpen
   });
 
-  // Quantity updater
-  const handleUpdateQuantity = async (itemId: string, newQty: number) => {
+  // Quantity updater with 350ms debouncing per item to eliminate network race conditions
+  const handleUpdateQuantity = (itemId: string, newQty: number) => {
     if (newQty < 0) return;
+
+    // Track active user keystroke
+    pendingUpdatesRef.current.set(itemId, newQty);
 
     const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
 
-    // Optimistic local update with safe 2-decimal rounding
+    // Optimistic local update: 60 FPS instantaneous UI response
     setRestockItems(prev => prev.map(item => {
       if (item.id === itemId || item.product.id === itemId) {
         return {
@@ -272,22 +292,41 @@ export const App: React.FC = () => {
     }));
 
     if (dbStatus.connected) {
-      try {
-        await api.updateQuantity(
-          itemId, 
-          newQty, 
-          targetItem?.product?.id, 
-          targetItem?.product?.barcode,
-          targetItem?.note
-        );
-      } catch (err) {
-        console.error('Failed to sync quantity to DB:', err);
+      const existingTimer = debounceTimersRef.current.get(itemId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
       }
+
+      const timer = setTimeout(async () => {
+        try {
+          await api.updateQuantity(
+            itemId, 
+            newQty, 
+            targetItem?.product?.id, 
+            targetItem?.product?.barcode,
+            targetItem?.note
+          );
+        } catch (err) {
+          console.error('Failed to sync quantity to DB:', err);
+        } finally {
+          debounceTimersRef.current.delete(itemId);
+          pendingUpdatesRef.current.delete(itemId);
+        }
+      }, 350);
+
+      debounceTimersRef.current.set(itemId, timer);
     }
   };
 
   // Remove single item
   const handleRemoveItem = async (itemId: string) => {
+    // Clear pending debounce timer if user removes item
+    if (debounceTimersRef.current.has(itemId)) {
+      clearTimeout(debounceTimersRef.current.get(itemId)!);
+      debounceTimersRef.current.delete(itemId);
+    }
+    pendingUpdatesRef.current.delete(itemId);
+
     const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
     setRestockItems(prev => prev.filter(i => i.id !== itemId && i.product.id !== itemId));
     showToast('បានលុបទំនិញចេញពីតារាង', 'info');
@@ -609,9 +648,9 @@ export const App: React.FC = () => {
         />
       </main>
 
-      {/* Toast Notification */}
+      {/* Toast Notification (Mobile friendly position & boundary) */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-bounce print:hidden">
+        <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 left-4 sm:left-auto max-w-sm z-50 animate-bounce print:hidden">
           <div className={`px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-2.5 text-xs font-semibold ${
             toast.type === 'success' 
               ? 'bg-slate-900 text-white border-slate-800' 

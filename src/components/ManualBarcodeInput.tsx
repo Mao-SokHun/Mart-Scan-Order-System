@@ -26,7 +26,14 @@ export const ManualBarcodeInput: React.FC<ManualBarcodeInputProps> = ({
     setBarcodeInput('');
     setJustSubmitted(true);
     setTimeout(() => setJustSubmitted(false), 800);
-    inputRef.current?.focus();
+    // Only auto-refocus on non-touch (desktop/laptop) devices so mobile soft keyboard doesn't jump
+    const isTouchOnly = typeof window !== 'undefined' && 
+      ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0)) &&
+      !window.matchMedia('(pointer: fine)').matches;
+
+    if (!isTouchOnly) {
+      inputRef.current?.focus();
+    }
   };
 
   return (
