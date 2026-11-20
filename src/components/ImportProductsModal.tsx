@@ -138,16 +138,21 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             row['ឈ្មោះខ្មែរ'] || row['ឈ្មោះជាភាសាខ្មែរ'] || '';
           const khmerName = String(rawKhmer).trim() || undefined;
 
-          // 4. Detect Category / Department
+          // 4. Detect Category / Department & Storage Temperature
           let category = sheetName.trim();
+          if (category === ' Milk and Yogurt') category = 'Milk and Yogurt';
+
           const rawCat = 
             row['Category'] || row['category'] || row['Department'] || 
-            row['department'] || row['Storage Temperature'] || 
-            row['ប្រភេទ'] || row['ផ្នែក'] || '';
+            row['department'] || row['ប្រភេទ'] || row['ផ្នែក'] || '';
           if (rawCat && String(rawCat).trim()) {
             category = String(rawCat).trim();
           }
-          if (category === ' Milk and Yogurt') category = 'Milk and Yogurt';
+
+          const rawTemp = String(row['Storage Temperature'] || row['storage_temperature'] || '').trim();
+          if (rawTemp && !category.includes(rawTemp)) {
+            category = `${category} (${rawTemp})`;
+          }
 
           // 5. Detect Unit / Purchase UoM
           const rawUnit = 
@@ -249,8 +254,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     const wb = XLSX.utils.book_new();
     const colWidths = [
       { wch: 18 }, { wch: 18 }, { wch: 34 }, { wch: 22 },
-      { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 24 }
+      { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 24 }
     ];
 
     const sheetsConfig = [
@@ -264,8 +268,6 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             'Name in Khmer': 'កូកាកូឡា ៣៣០មល',
             'Vendors/Vendor': 'Cambodia Beverage Company',
             'Purchase UoM': 'កំប៉ុង',
-            'Cost Price': 0.40,
-            'Selling Price': 0.60,
             'Current Stock': 24,
             'Remark': 'Delivery on Thu'
           },
@@ -276,8 +278,6 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             'Name in Khmer': 'ស្រាបៀរអង្គរ',
             'Vendors/Vendor': 'Cambrew Ltd',
             'Purchase UoM': 'កំប៉ុង',
-            'Cost Price': 0.55,
-            'Selling Price': 0.85,
             'Current Stock': 12,
             'Remark': 'Delivery on Thu'
           }
@@ -293,8 +293,6 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             'Name in Khmer': 'នំកក',
             'Vendors/Vendor': 'FF2',
             'Purchase UoM': 'Units',
-            'Cost Price': 1.50,
-            'Selling Price': 2.25,
             'Current Stock': 0,
             'Remark': 'Delivery Thu'
           }
@@ -310,8 +308,6 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             'Name in Khmer': 'ពងមាន់',
             'Vendors/Vendor': 'SM',
             'Purchase UoM': 'Pack*30',
-            'Cost Price': 3.20,
-            'Selling Price': 4.00,
             'Current Stock': 0,
             'Remark': 'Delivery on Thu'
           }
@@ -327,8 +323,6 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             'Name in Khmer': 'យ៉ាអួរ ដាលាត',
             'Vendors/Vendor': 'Dalat',
             'Purchase UoM': 'Ctn*40',
-            'Cost Price': 12.00,
-            'Selling Price': 15.00,
             'Current Stock': 0,
             'Remark': 'Lead Time 2 Week'
           }

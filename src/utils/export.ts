@@ -10,11 +10,12 @@ export const getCurrentDayOfWeek = (): OrderDay => {
   return days[dayIndex] || 'Thu';
 };
 
-// Helper to determine storage temperature from category
-const extractStorageTemp = (category: string): string => {
+// Helper to determine storage temperature from category and product name
+const extractStorageTemp = (category: string, prodName?: string): string => {
   const cat = (category || '').toLowerCase();
-  if (cat.includes('chilled') || cat.includes('ត្រជាក់') || cat.includes('ទឹកដោះគោ') || cat.includes('dairy') || cat.includes('milk') || cat.includes('yogurt')) return 'Chilled';
-  if (cat.includes('frozen') || cat.includes('កក')) return 'Frozen';
+  const name = (prodName || '').toLowerCase();
+  if (cat.includes('frozen') || name.includes('frozen') || name.includes('កក')) return 'Frozen';
+  if (cat.includes('chilled') || name.includes('chilled') || cat.includes('ត្រជាក់') || cat.includes('ទឹកដោះគោ') || cat.includes('dairy') || cat.includes('milk') || cat.includes('yogurt')) return 'Chilled';
   if (cat.includes('dry') || cat.includes('ស្ងួត') || cat.includes('ក្រៀម')) return 'Dry';
   return 'Dry';
 };
@@ -61,7 +62,7 @@ export const exportDailyPlanExcel = (
 
   if (filteredItems.length === 0) return false;
 
-  // Exact Daily Plan Columns enhanced with explicit "ចំនួនត្រូវទិញ (Order Qty)"
+  // Exact Daily Plan Columns matching Takeo Store format: 14 columns
   const headers = [
     'Storage Temperature',
     'Item Code',
@@ -69,7 +70,6 @@ export const exportDailyPlanExcel = (
     'Name in Khmer',
     'Vendors/Vendor',
     'Purchase UoM',
-    'ចំនួនត្រូវទិញ (Order Qty)',
     'Mon',
     'Tue',
     'Wed',
@@ -87,7 +87,6 @@ export const exportDailyPlanExcel = (
     { wch: 30 }, // Name in Khmer
     { wch: 18 }, // Vendors/Vendor
     { wch: 14 }, // Purchase UoM
-    { wch: 22 }, // ចំនួនត្រូវទិញ (Order Qty)
     { wch: 8 },  // Mon
     { wch: 8 },  // Tue
     { wch: 8 },  // Wed
@@ -107,7 +106,7 @@ export const exportDailyPlanExcel = (
   };
 
   filteredItems.forEach(item => {
-    const temp = extractStorageTemp(item.product.category);
+    const temp = extractStorageTemp(item.product.category, item.product.name);
     const sheet = extractSheetName(item.product.category);
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
 
@@ -118,7 +117,6 @@ export const exportDailyPlanExcel = (
       'Name in Khmer': item.product.khmerName || '',
       'Vendors/Vendor': vendor,
       'Purchase UoM': item.product.unit || 'Units',
-      'ចំនួនត្រូវទិញ (Order Qty)': item.orderQuantity, // Explicit quantity column!
       'Mon': orderDay === 'Mon' ? item.orderQuantity : '',
       'Tue': orderDay === 'Tue' ? item.orderQuantity : '',
       'Wed': orderDay === 'Wed' ? item.orderQuantity : '',
@@ -204,7 +202,7 @@ export const exportDailyPlanExcel = (
     const rows = sheetsData[sheetName] || [];
     if (rows.length > 0) {
       // Add sheet subtotal row
-      const sheetQty = rows.reduce((acc, r) => acc + (parseInt(r['ចំនួនត្រូវទិញ (Order Qty)'], 10) || 0), 0);
+      const sheetQty = rows.reduce((acc, r) => acc + (parseInt(r[orderDay], 10) || 0), 0);
 
       const rowsWithSubtotal = [
         ...rows,
@@ -215,7 +213,6 @@ export const exportDailyPlanExcel = (
           'Name in Khmer': '',
           'Vendors/Vendor': '',
           'Purchase UoM': '',
-          'ចំនួនត្រូវទិញ (Order Qty)': sheetQty,
           'Mon': orderDay === 'Mon' ? sheetQty : '',
           'Tue': orderDay === 'Tue' ? sheetQty : '',
           'Wed': orderDay === 'Wed' ? sheetQty : '',
