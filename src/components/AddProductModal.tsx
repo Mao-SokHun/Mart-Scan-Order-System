@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
-import { X, PlusCircle, PackagePlus, AlertCircle, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
+import { X, PlusCircle, PackagePlus, AlertCircle } from 'lucide-react';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -20,14 +20,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [khmerName, setKhmerName] = useState('');
   const [category, setCategory] = useState('ទំនិញប្រចាំថ្ងៃ (Daily)');
   const [unit, setUnit] = useState('កំប៉ុង');
-  const [costPrice, setCostPrice] = useState('0');
-  const [sellingPrice, setSellingPrice] = useState('0');
-  const [showPricing, setShowPricing] = useState(false);
+  const [costPrice] = useState('0');
+  const [sellingPrice] = useState('0');
   const [currentStock, setCurrentStock] = useState('0');
-  const [minStock, setMinStock] = useState('10');
+  const [minStock, setMinStock] = useState('24');
   const [supplierName, setSupplierName] = useState('');
   const [supplierPhone, setSupplierPhone] = useState('');
-  const [remark, setRemark] = useState('');
   const [addToOrderNow, setAddToOrderNow] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -36,14 +34,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setKhmerName('');
     setCategory('ទំនិញប្រចាំថ្ងៃ (Daily)');
     setUnit('កំប៉ុង');
-    setCostPrice('0');
-    setSellingPrice('0');
-    setShowPricing(false);
     setCurrentStock('0');
-    setMinStock('10');
+    setMinStock('24');
     setSupplierName('');
     setSupplierPhone('');
-    setRemark('');
     setIsSubmitting(false);
   };
 
@@ -72,25 +66,19 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     const parsedCost = Math.round(Math.max(0, parseFloat(costPrice) || 0) * 100) / 100;
     const parsedSelling = Math.round(Math.max(0, parseFloat(sellingPrice) || 0) * 100) / 100;
 
-    const cleanSupplier = supplierName.trim() || 'ទូទៅ (General Supplier)';
-    const finalSupplier = (remark.trim() && !cleanSupplier.includes('['))
-      ? `${cleanSupplier} [${remark.trim()}]`
-      : cleanSupplier;
-
     const newProd: Product = {
       id: `p-${Date.now()}`,
       barcode: cleanBarcode,
       name: name.trim(),
       khmerName: khmerName.trim() || undefined,
       category,
-      unit: unit.trim() || 'កំប៉ុង',
+      unit,
       costPrice: parsedCost,
       sellingPrice: parsedSelling,
       currentStock: Math.max(0, parseInt(currentStock, 10) || 0),
       minStock: Math.max(0, parseInt(minStock, 10) || 10),
-      supplierName: finalSupplier,
+      supplierName: supplierName.trim() || 'ទូទៅ (General Supplier)',
       supplierPhone: supplierPhone.trim() || undefined,
-      remark: remark.trim() || undefined,
       image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop&q=80'
     };
 
@@ -217,29 +205,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">ឈ្មោះអ្នកផ្គត់ផ្គង់ (Vendor/Supplier)</label>
-              <input
-                type="text"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                placeholder="ឧ. SM, Dalat, FF2, Coca-Cola..."
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">កាលវិភាគដឹកជញ្ជូន / សម្គាល់ (Remark)</label>
-              <input
-                type="text"
-                value={remark}
-                onChange={(e) => setRemark(e.target.value)}
-                placeholder="ឧ. Delivery on Thu, Daily..."
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">ស្តុកបច្ចុប្បន្ន (Current Stock)</label>
@@ -251,7 +216,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">កម្រិតស្តុកត្រូវទិញ (Min Stock)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">កម្រិតស្តុកត្រូវទិញបន្ថែម (Min Stock)</label>
               <input
                 type="number"
                 value={minStock}
@@ -261,57 +226,27 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">លេខទូរស័ព្ទ Supplier (ស្រេចចិត្ត)</label>
-            <input
-              type="text"
-              value={supplierPhone}
-              onChange={(e) => setSupplierPhone(e.target.value)}
-              placeholder="ឧ. 012 345 678"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-            />
-          </div>
-
-          {/* Optional Pricing Section (Collapsible) */}
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setShowPricing(!showPricing)}
-              className="w-full py-2 px-3 rounded-xl bg-slate-100/70 hover:bg-slate-100 border border-slate-200/80 text-xs font-semibold text-slate-600 flex items-center justify-between transition cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-slate-400" />
-                <span>កំណត់តម្លៃទំនិញ (ស្រេចចិត្ត / Optional Pricing)</span>
-              </span>
-              {showPricing ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-            </button>
-
-            {showPricing && (
-              <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-2 gap-3 animate-fade-in">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">តម្លៃដើមទិញចូល ($ Cost)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={costPrice}
-                    onChange={(e) => setCostPrice(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-500"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">តម្លៃលក់ចេញ ($ Price)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={sellingPrice}
-                    onChange={(e) => setSellingPrice(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-500"
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">ឈ្មោះអ្នកផ្គត់ផ្គង់ (Supplier)</label>
+              <input
+                type="text"
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+                placeholder="ឧ. DKSH Cambodia, Coca-Cola..."
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">លេខទូរស័ព្ទ Supplier</label>
+              <input
+                type="text"
+                value={supplierPhone}
+                onChange={(e) => setSupplierPhone(e.target.value)}
+                placeholder="ឧ. 012 345 678"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+              />
+            </div>
           </div>
 
           <div className="pt-2">

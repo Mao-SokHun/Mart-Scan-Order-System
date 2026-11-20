@@ -648,7 +648,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
                       <th className="py-2.5 px-3">ឈ្មោះខ្មែរ</th>
                       <th className="py-2.5 px-3">ផ្នែក (Category)</th>
                       <th className="py-2.5 px-3 text-center">ឯកតា</th>
-                      <th className="py-2.5 px-3 text-right">តម្លៃដើម</th>
+                      <th className="py-2.5 px-3 text-center">ស្តុក</th>
                       <th className="py-2.5 px-3">អ្នកផ្គត់ផ្គង់</th>
                       <th className="py-2.5 px-2 text-center">ស្ថានភាព</th>
                     </tr>
@@ -662,8 +662,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
                         <td className="py-2 px-3 text-slate-500 max-w-[150px] truncate">{row.khmerName || '-'}</td>
                         <td className="py-2 px-3 text-slate-600">{row.category}</td>
                         <td className="py-2 px-3 text-center text-slate-600">{row.unit}</td>
-                        <td className="py-2 px-3 text-right font-medium text-slate-700">
-                          ${(row.costPrice || 0).toFixed(2)}
+                        <td className="py-2 px-3 text-center font-medium text-slate-700">
+                          {row.currentStock}
                         </td>
                         <td className="py-2 px-3 text-slate-600 truncate max-w-[140px]">{row.supplierName}</td>
                         <td className="py-2 px-2 text-center">

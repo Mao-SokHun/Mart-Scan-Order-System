@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { RestockItem } from '../types';
-import { OrderDay, getCurrentDayOfWeek, parseVendorAndRemark } from '../utils/export';
+import { OrderDay, getCurrentDayOfWeek } from '../utils/export';
 import { 
   Trash2, Plus, Minus, FileSpreadsheet, Printer, 
   Send, Search, Filter, ShoppingBag, AlertTriangle, 
-  Check, Phone, AlertCircle, Calendar, X, Truck, Building2 
+  Check, Phone, AlertCircle, Calendar, X 
 } from 'lucide-react';
 
 interface RestockOrderTableProps {
@@ -65,10 +65,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
     return matchesSupplier && matchesZeroOnly && matchesSearch;
   });
 
-  const totalCost = filteredItems.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   const zeroQtyCount = filteredItems.filter(i => i.orderQuantity <= 0).length;
-  const hasPricing = totalCost > 0;
 
   const handleExportWithValidation = () => {
     if (filteredItems.length === 0) return;
@@ -144,12 +142,17 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               <span className="text-xs sm:text-sm font-bold text-slate-800">{filteredItems.length} មុខ</span>
             </div>
 
+            <div className="bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 block font-medium">សរុបចំនួនទិញ</span>
+              <span className="text-xs sm:text-sm font-bold text-blue-600">{totalQty} ឯកតា</span>
+            </div>
+
             {zeroQtyCount > 0 ? (
               <button
                 type="button"
                 onClick={() => setFilterZeroOnly(!filterZeroOnly)}
                 title={filterZeroOnly ? 'ចុចដើម្បីបង្ហាញទំនិញទាំងអស់' : 'ចុចដើម្បីបង្ហាញតែទំនិញចាំវាយចំនួន'}
-                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border transition shadow-2xs text-left cursor-pointer active:scale-95 ${
+                className={`col-span-2 sm:col-span-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border transition shadow-2xs text-left cursor-pointer active:scale-95 ${
                   filterZeroOnly
                     ? 'bg-amber-400 border-amber-500 text-slate-900 ring-2 ring-amber-300'
                     : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900 animate-pulse'
@@ -157,26 +160,14 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               >
                 <span className="text-[10px] sm:text-[11px] block font-bold flex items-center gap-1 text-amber-800">
                   <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600" />
-                  <span>{filterZeroOnly ? 'កំពុងមើល: ចាំវាយចំនួន' : 'ចាំវាយចំនួន (ចុចមើល)'}</span>
+                  <span>{filterZeroOnly ? 'កំពុងមើល: ចាំវាយចំនួន' : 'ចាំវាយចំនួន'}</span>
                 </span>
                 <span className="text-xs sm:text-sm font-bold text-amber-950">{zeroQtyCount} មុខ</span>
               </button>
             ) : (
-              <div className="bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[10px] sm:text-[11px] text-slate-400 block font-medium">សរុបចំនួន</span>
-                <span className="text-xs sm:text-sm font-bold text-blue-600">{totalQty} ឯកតា</span>
-              </div>
-            )}
-
-            {hasPricing ? (
-              <div className="col-span-2 sm:col-span-1 bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-blue-200 bg-blue-50/30 shadow-2xs flex justify-between sm:block items-center">
-                <span className="text-[10px] sm:text-[11px] text-blue-600 block font-medium">សរុបទឹកប្រាក់</span>
-                <span className="text-xs sm:text-sm font-bold text-emerald-600">${totalCost.toFixed(2)}</span>
-              </div>
-            ) : (
-              <div className="col-span-2 sm:col-span-1 bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-teal-200 bg-teal-50/30 shadow-2xs flex justify-between sm:block items-center">
-                <span className="text-[10px] sm:text-[11px] text-teal-700 block font-medium">អ្នកផ្គត់ផ្គង់</span>
-                <span className="text-xs sm:text-sm font-bold text-teal-900">{suppliers.length} ក្រុមហ៊ុន</span>
+              <div className="col-span-2 sm:col-span-1 bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-2xs flex justify-between sm:block items-center">
+                <span className="text-[10px] sm:text-[11px] text-emerald-700 block font-medium">ស្ថានភាពបញ្ជី</span>
+                <span className="text-xs sm:text-sm font-bold text-emerald-600">គ្រប់ចំនួនរួចរាល់</span>
               </div>
             )}
           </div>
@@ -405,36 +396,17 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                     </div>
                   </div>
 
-                  {/* Supplier & Unit Price Row */}
-                  {(() => {
-                    const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
-                    return (
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2.5 pt-2 border-t border-slate-100">
-                        <div className="truncate max-w-[200px]">
-                          <span className="text-slate-400">អ្នកផ្គត់ផ្គង់: </span>
-                          <span className="font-semibold text-slate-800">{vendor}</span>
-                        </div>
-                        {(item.unitCost || 0) > 0 ? (
-                          <div>
-                            <span className="text-slate-400">តម្លៃដើម: </span>
-                            <span className="font-bold text-slate-800">${(item.unitCost || 0).toFixed(2)}</span>
-                          </div>
-                        ) : remark || item.product.remark ? (
-                          <div className="text-right">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                              <Truck className="w-2.5 h-2.5 shrink-0" />
-                              <span>{remark || item.product.remark}</span>
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="text-right">
-                            <span className="text-slate-400">ឯកតា: </span>
-                            <span className="font-bold text-slate-700">{item.product.unit || 'Units'}</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Supplier & Category Row */}
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2.5 pt-2 border-t border-slate-100">
+                    <div className="truncate max-w-[200px]">
+                      <span className="text-slate-400">អ្នកផ្គត់ផ្គង់: </span>
+                      <span className="font-medium text-slate-700">{item.product.supplierName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">ផ្នែក: </span>
+                      <span className="font-medium text-slate-700">{item.product.category}</span>
+                    </div>
+                  </div>
 
                   {/* Bottom Quantity Control Center (Touch-friendly) */}
                   <div className="mt-2.5 flex items-center justify-between gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
@@ -484,23 +456,12 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                       </span>
                     </div>
 
-                    {/* Total cost or status for this card */}
+                    {/* Quantity Display */}
                     <div className="text-right shrink-0">
-                      {(item.unitCost || 0) > 0 ? (
-                        <>
-                          <span className="text-[10px] text-slate-400 block">សរុបទឹកប្រាក់</span>
-                          <span className="text-sm font-extrabold text-emerald-600">
-                            ${(item.totalCost || 0).toFixed(2)}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-[10px] text-slate-400 block">ស្ថានភាព</span>
-                          <span className={`text-xs font-bold ${isZeroQty ? 'text-amber-600' : 'text-emerald-600'}`}>
-                            {isZeroQty ? 'ចាំវាយចំនួន' : 'បានបញ្ជាក់'}
-                          </span>
-                        </>
-                      )}
+                      <span className="text-[10px] text-slate-400 block">ចំនួនបញ្ជាទិញ</span>
+                      <span className={`text-sm font-extrabold ${isZeroQty ? 'text-amber-600' : 'text-blue-600'}`}>
+                        {item.orderQuantity} {item.product.unit}
+                      </span>
                     </div>
                   </div>
 
@@ -523,17 +484,10 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 <span className="text-xs font-bold text-blue-700">{totalQty} ឯកតា</span>
               </div>
               <div className="text-right">
-                {hasPricing ? (
-                  <>
-                    <span className="text-[10px] text-slate-400 block font-medium">ទឹកប្រាក់សរុប</span>
-                    <span className="text-base font-extrabold text-emerald-600">${(totalCost || 0).toFixed(2)}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-[10px] text-slate-400 block font-medium">អ្នកផ្គត់ផ្គង់</span>
-                    <span className="text-sm font-bold text-teal-700">{suppliers.length} ក្រុមហ៊ុន</span>
-                  </>
-                )}
+                <span className="text-[10px] text-slate-400 block font-medium">ស្ថានភាព</span>
+                <span className={`text-xs font-bold ${zeroQtyCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {zeroQtyCount > 0 ? `ខ្វះ ${zeroQtyCount} មុខមិនទាន់វាយ` : 'គ្រប់ចំនួនរួចរាល់'}
+                </span>
               </div>
             </div>
           </div>
@@ -547,22 +501,12 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                   <th className="py-3 px-3.5 text-center w-12">#</th>
                   <th className="py-3 px-3">ទំនិញ / Barcode</th>
-                  <th className="py-3 px-3">{hasPricing ? 'ប្រភេទ' : 'ផ្នែក (Department)'}</th>
+                  <th className="py-3 px-3">ផ្នែក (Category)</th>
                   <th className="py-3 px-3 text-center">ស្តុកសល់</th>
-                  <th className="py-3 px-3">{hasPricing ? 'អ្នកផ្គត់ផ្គង់' : 'អ្នកផ្គត់ផ្គង់ (Vendor)'}</th>
-                  {hasPricing ? (
-                    <th className="py-3 px-3 text-right">តម្លៃដើម</th>
-                  ) : (
-                    <th className="py-3 px-3 text-center">ឯកតាទិញ (Purchase UoM)</th>
-                  )}
-                  <th className="py-3 px-3 text-center w-48">
+                  <th className="py-3 px-3">អ្នកផ្គត់ផ្គង់</th>
+                  <th className="py-3 px-3 text-center w-52">
                     ចំនួនត្រូវទិញ <span className="text-rose-500">* (Admin វាយ)</span>
                   </th>
-                  {hasPricing ? (
-                    <th className="py-3 px-3 text-right">សរុប</th>
-                  ) : (
-                    <th className="py-3 px-3 text-center">កាលវិភាគ / សម្គាល់</th>
-                  )}
                   <th className="py-3 px-3 text-center w-12"></th>
                 </tr>
               </thead>
@@ -653,39 +597,19 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                       {/* Supplier */}
                       <td className="py-3.5 px-3">
-                        {(() => {
-                          const { vendor } = parseVendorAndRemark(item.product.supplierName);
-                          return (
-                            <>
-                              <div className="text-slate-800 font-medium truncate max-w-[180px]">
-                                {hasPricing ? item.product.supplierName : vendor}
-                              </div>
-                              {item.product.supplierPhone && (
-                                <a
-                                  href={`tel:${item.product.supplierPhone}`}
-                                  className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
-                                >
-                                  <Phone className="w-2.5 h-2.5" />
-                                  <span>{item.product.supplierPhone}</span>
-                                </a>
-                              )}
-                            </>
-                          );
-                        })()}
+                        <div className="text-slate-800 font-medium truncate max-w-[180px]">
+                          {item.product.supplierName}
+                        </div>
+                        {item.product.supplierPhone && (
+                          <a
+                            href={`tel:${item.product.supplierPhone}`}
+                            className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <Phone className="w-2.5 h-2.5" />
+                            <span>{item.product.supplierPhone}</span>
+                          </a>
+                        )}
                       </td>
-
-                      {/* Unit Cost or Purchase UoM */}
-                      {hasPricing ? (
-                        <td className="py-3.5 px-3 text-right font-medium text-slate-600">
-                          ${(item.unitCost || 0).toFixed(2)}
-                        </td>
-                      ) : (
-                        <td className="py-3.5 px-3 text-center">
-                          <span className="inline-block bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded border border-slate-200 text-[11px]">
-                            {item.product.unit || 'Units'}
-                          </span>
-                        </td>
-                      )}
 
                       {/* Order Quantity Controller (Admin Focus) */}
                       <td className="py-3.5 px-3">
@@ -742,28 +666,6 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                         </div>
                       </td>
 
-                      {/* Total Cost or Delivery Remark */}
-                      {hasPricing ? (
-                        <td className="py-3.5 px-3 text-right font-bold text-slate-800">
-                          ${(item.totalCost || 0).toFixed(2)}
-                        </td>
-                      ) : (
-                        <td className="py-3.5 px-3 text-center">
-                          {(() => {
-                            const { remark } = parseVendorAndRemark(item.product.supplierName);
-                            const finalRemark = remark || item.product.remark;
-                            return finalRemark ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                                <Truck className="w-2.5 h-2.5 shrink-0" />
-                                <span>{finalRemark}</span>
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 text-[11px]">-</span>
-                            );
-                          })()}
-                        </td>
-                      )}
-
                       {/* Delete action */}
                       <td className="py-3.5 px-3 text-center">
                         <button
@@ -785,19 +687,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                   </td>
                   <td></td>
                   <td></td>
-                  <td></td>
                   <td className="py-3.5 px-3 text-center text-blue-600 text-xs">
                     {totalQty} ឯកតា
                   </td>
-                  {hasPricing ? (
-                    <td className="py-3.5 px-3 text-right text-emerald-600 text-sm">
-                      ${(totalCost || 0).toFixed(2)}
-                    </td>
-                  ) : (
-                    <td className="py-3.5 px-3 text-center text-teal-700 text-xs">
-                      {suppliers.length} ក្រុមហ៊ុន
-                    </td>
-                  )}
                   <td></td>
                 </tr>
               </tfoot>

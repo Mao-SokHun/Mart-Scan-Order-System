@@ -26,8 +26,7 @@ import { INITIAL_PRODUCTS } from './data/mockProducts';
 import { 
   Store, Camera, Package, Plus, Sparkles, 
   CheckCircle, AlertCircle, ShoppingBag, 
-  ChevronDown, ChevronUp, Bell, Database, RefreshCw, FileSpreadsheet,
-  Truck
+  ChevronDown, ChevronUp, Bell, Database, RefreshCw, FileSpreadsheet 
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -515,79 +514,68 @@ export const App: React.FC = () => {
         )}
 
         {/* Quick Dashboard Stat Cards */}
-        {(() => {
-          const grandTotalCost = restockItems.reduce((a, c) => a + (c.totalCost || 0), 0);
-          const grandTotalQty = restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0);
-          const uniqueVendorsCount = Array.from(
-            new Set(
-              restockItems
-                .map(i => (i.product?.supplierName || '').replace(/\[.*?\]/, '').trim())
-                .filter(Boolean)
-            )
-          ).length;
-
-          return (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4 sm:mb-6">
-              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">កំពុងកុម្ម៉ង់</span>
-                  <span className="text-sm sm:text-base font-extrabold text-slate-800">{restockItems.length} <span className="text-[11px] text-slate-400 font-normal">មុខ</span></span>
-                </div>
-              </div>
-
-              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                  <Package className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">ចំនួនសរុប</span>
-                  <span className="text-sm sm:text-base font-extrabold text-slate-800">{grandTotalQty} <span className="text-[11px] text-slate-400 font-normal">ឯកតា</span></span>
-                </div>
-              </div>
-
-              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
-                {grandTotalCost > 0 ? (
-                  <>
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">សរុបទឹកប្រាក់</span>
-                      <span className="text-sm sm:text-base font-extrabold text-emerald-600">${grandTotalCost.toFixed(2)}</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                      <Truck className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">អ្នកផ្គត់ផ្គង់</span>
-                      <span className="text-sm sm:text-base font-extrabold text-teal-700">{uniqueVendorsCount} <span className="text-[11px] text-slate-400 font-normal">ក្រុមហ៊ុន</span></span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div 
-                onClick={() => setIsCatalogOpen(true)}
-                className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3 cursor-pointer hover:border-blue-300 hover:shadow-xs transition group"
-                title="ចុចដើម្បីមើល ឬគ្រប់គ្រងទំនិញក្នុង Catalog"
-              >
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0 transition">
-                  <Store className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">ទំនិញក្នុង Catalog</span>
-                  <span className="text-sm sm:text-base font-extrabold text-slate-800 group-hover:text-blue-600 transition">{products.length} <span className="text-[11px] text-slate-400 font-normal">មុខ</span></span>
-                </div>
-              </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4 sm:mb-6">
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-          );
-        })()}
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">កំពុងកុម្ម៉ង់</span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-800">{restockItems.length} <span className="text-[11px] text-slate-400 font-normal">មុខ</span></span>
+            </div>
+          </div>
+
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">ចំនួនសរុប</span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-800">{restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} <span className="text-[11px] text-slate-400 font-normal">ឯកតា</span></span>
+            </div>
+          </div>
+
+          {/* Card 3: Pending Input or Readiness Status */}
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
+            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              restockItems.filter(i => i.orderQuantity <= 0).length > 0 
+                ? 'bg-amber-50 text-amber-600' 
+                : 'bg-emerald-50 text-emerald-600'
+            }`}>
+              {restockItems.filter(i => i.orderQuantity <= 0).length > 0 ? (
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+              ) : (
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">
+                {restockItems.filter(i => i.orderQuantity <= 0).length > 0 ? 'ចាំវាយចំនួន' : 'ស្ថានភាព'}
+              </span>
+              <span className={`text-sm sm:text-base font-extrabold ${
+                restockItems.filter(i => i.orderQuantity <= 0).length > 0 ? 'text-amber-600' : 'text-emerald-600'
+              }`}>
+                {restockItems.filter(i => i.orderQuantity <= 0).length > 0 
+                  ? `${restockItems.filter(i => i.orderQuantity <= 0).length} មុខ` 
+                  : 'គ្រប់ចំនួន'}
+              </span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => setIsCatalogOpen(true)}
+            className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3 cursor-pointer hover:border-blue-300 hover:shadow-xs transition group"
+            title="ចុចដើម្បីមើល ឬគ្រប់គ្រងទំនិញក្នុង Catalog"
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0 transition">
+              <Store className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">ទំនិញក្នុង Catalog</span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-800 group-hover:text-blue-600 transition">{products.length} <span className="text-[11px] text-slate-400 font-normal">មុខ</span></span>
+            </div>
+          </div>
+        </div>
 
         {/* Barcode Input Section */}
         <ManualBarcodeInput
@@ -696,10 +684,10 @@ export const App: React.FC = () => {
       <div className="md:hidden print:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-2.5 flex items-center justify-between z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
         <div className="min-w-0 pr-2">
           <span className="text-[10px] text-slate-500 block font-medium truncate">
-            សរុប {restockItems.length} មុខ • {restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} ឯកតា
+            ទំនិញក្នុងតារាងបញ្ជាទិញ
           </span>
-          <span className="text-sm font-extrabold text-emerald-600">
-            ${(restockItems.reduce((a, c) => a + (c.totalCost || 0), 0) || 0).toFixed(2)}
+          <span className="text-sm font-extrabold text-blue-600">
+            {restockItems.length} មុខ • {restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} ឯកតា
           </span>
         </div>
 
