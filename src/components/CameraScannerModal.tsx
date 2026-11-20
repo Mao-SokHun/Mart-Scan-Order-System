@@ -47,12 +47,12 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     const prevTime = lastScannedTimeRef.current;
 
     // Intelligent debounce:
-    // If the same barcode is scanned: ignore if within 2000ms
-    // If a different barcode is scanned: allow after only 450ms for fast shelf scanning
-    if (cleanCode === prevCode && now - prevTime < 2000) {
+    // If the same barcode is scanned: ignore if within 1800ms
+    // If a different barcode is scanned: allow after only 200ms for lightning-fast scanning
+    if (cleanCode === prevCode && now - prevTime < 1800) {
       return;
     }
-    if (cleanCode !== prevCode && now - prevTime < 450) {
+    if (cleanCode !== prevCode && now - prevTime < 200) {
       return;
     }
 

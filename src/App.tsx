@@ -191,15 +191,79 @@ export const App: React.FC = () => {
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     if (!cleanBarcode) return;
 
-    // If connected to Neon DB, perform scan through API
+    // ⚡ 1. ULTRA-FAST INSTANT IN-MEMORY SCAN (0ms latency):
+    // Check locally cached catalog first so data pops into the table instantaneously!
+    const foundProduct = products.find(p => p.barcode.toLowerCase() === cleanBarcode.toLowerCase());
+
+    if (foundProduct) {
+      sound.playSuccessBeep();
+
+      // Check if item already exists in restock table
+      let alreadyExists = false;
+      let existingId = '';
+
+      setRestockItems(prevItems => {
+        const existingIndex = prevItems.findIndex(
+          i => i.product.id === foundProduct.id || i.product.barcode.toLowerCase() === cleanBarcode.toLowerCase()
+        );
+
+        if (existingIndex > -1) {
+          alreadyExists = true;
+          existingId = prevItems[existingIndex].id;
+          return prevItems; // Do not increment or duplicate
+        }
+
+        // New item: 0ms Instant addition with orderQuantity = 0
+        const newItem: RestockItem = {
+          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          product: foundProduct,
+          orderQuantity: 0,
+          scannedAt: new Date().toISOString(),
+          unitCost: foundProduct.costPrice || 0,
+          totalCost: 0
+        };
+        existingId = newItem.id;
+        return [newItem, ...prevItems];
+      });
+
+      if (alreadyExists) {
+        setHighlightedItemId(existingId);
+        setTimeout(() => setHighlightedItemId(null), 2500);
+        showToast(`⚠️ «${foundProduct.name}» មានក្នុងតារាងរួចហើយ! (មិនបូកស្ទួនចំនួនទេ)`, 'info');
+      } else {
+        setHighlightedItemId(existingId);
+        setTimeout(() => setHighlightedItemId(null), 2500);
+        showToast(`✅ បានស្កេន «${foundProduct.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
+
+        // Asynchronous non-blocking background sync to Neon DB
+        if (dbStatus.connected) {
+          api.scanBarcode(cleanBarcode).then(res => {
+            if (res.found && res.item) {
+              setRestockItems(prev => prev.map(i => i.id === existingId ? { ...res.item!, id: res.item!.id } : i));
+            }
+          }).catch(err => {
+            console.warn('Background sync scan failed:', err);
+          });
+        }
+      }
+      return;
+    }
+
+    // 🌐 2. SERVER FALLBACK LOOKUP:
+    // Only if product was NOT in local memory (e.g. registered on another machine)
     if (dbStatus.connected) {
       try {
         const res = await api.scanBarcode(cleanBarcode);
         if (res.found && res.item) {
           const item = res.item;
 
+          // Add to local products catalog for future instant scans
+          setProducts(prev => {
+            const exists = prev.some(p => p.id === item.product.id);
+            return exists ? prev : [item.product, ...prev];
+          });
+
           if (res.action === 'already_exists') {
-            // DO NOT increment quantity!
             sound.playSuccessBeep();
             setHighlightedItemId(item.id);
             setTimeout(() => setHighlightedItemId(null), 2500);
@@ -207,7 +271,6 @@ export const App: React.FC = () => {
             return;
           }
 
-          // Newly added item: guard against duplicate keys in state
           sound.playSuccessBeep();
           setRestockItems(prev => {
             const exists = prev.some(i => i.id === item.id || i.product.id === item.product.id);
@@ -222,46 +285,15 @@ export const App: React.FC = () => {
           return;
         }
       } catch (e) {
-        console.warn('API scan failed, falling back to local search:', e);
+        console.warn('API scan failed:', e);
       }
     }
 
-    // Local Fallback logic (case-insensitive)
-    const foundProduct = products.find(p => p.barcode.toLowerCase() === cleanBarcode.toLowerCase());
-    if (foundProduct) {
-      sound.playSuccessBeep();
-      setRestockItems(prevItems => {
-        const existingIndex = prevItems.findIndex(i => i.product.id === foundProduct.id);
-        if (existingIndex > -1) {
-          // ALREADY EXISTS: Do NOT increment quantity!
-          const existing = prevItems[existingIndex];
-          setHighlightedItemId(existing.id);
-          setTimeout(() => setHighlightedItemId(null), 2500);
-          showToast(`⚠️ «${foundProduct.name}» មានក្នុងតារាងរួចហើយ! (មិនបូកស្ទួនចំនួនទេ)`, 'info');
-          return prevItems;
-        } else {
-          // Newly added with quantity = 0 so Admin types it
-          const defaultQty = 0;
-          const newItem: RestockItem = {
-            id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-            product: foundProduct,
-            orderQuantity: defaultQty,
-            scannedAt: new Date().toISOString(),
-            unitCost: foundProduct.costPrice || 0,
-            totalCost: 0
-          };
-          setHighlightedItemId(newItem.id);
-          setTimeout(() => setHighlightedItemId(null), 2500);
-          showToast(`✅ បានស្កេន «${foundProduct.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
-          return [newItem, ...prevItems];
-        }
-      });
-    } else {
-      sound.playErrorBuzz();
-      setNotFoundBarcode(cleanBarcode);
-      setIsAddProductOpen(true);
-      showToast(`រកមិនឃើញ Barcode "${cleanBarcode}" ក្នុងប្រព័ន្ធទេ!`, 'error');
-    }
+    // ❌ 3. TRULY UNKNOWN BARCODE:
+    sound.playErrorBuzz();
+    setNotFoundBarcode(cleanBarcode);
+    setIsAddProductOpen(true);
+    showToast(`រកមិនឃើញ Barcode "${cleanBarcode}" ក្នុងប្រព័ន្ធទេ!`, 'error');
   }, [dbStatus.connected, products]);
 
   // Global listener for USB/Bluetooth Barcode Scanner Guns
