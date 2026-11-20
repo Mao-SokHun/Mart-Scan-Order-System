@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Camera, X, RefreshCw, Zap, AlertCircle, CheckCircle2, SwitchCamera, HelpCircle, Sparkles } from 'lucide-react';
+import { Camera, X, RefreshCw, Zap, AlertCircle, CheckCircle2, SwitchCamera, HelpCircle } from 'lucide-react';
 import { sound } from '../utils/audio';
 
 interface CameraScannerModalProps {
@@ -23,14 +23,11 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const [hasTorch, setHasTorch] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
   const [scanCount, setScanCount] = useState<number>(0);
-  const [engineType, setEngineType] = useState<'native' | 'html5'>('html5');
 
-  // References
-  const nativeVideoRef = useRef<HTMLVideoElement | null>(null);
-  const nativeStreamRef = useRef<MediaStream | null>(null);
-  const nativeScanTimerRef = useRef<number | null>(null);
-
+  // References to prevent race conditions and concurrent calls
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isStartingRef = useRef(false);
+  const isStoppingRef = useRef(false);
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
   const toastTimerRef = useRef<number | null>(null);
@@ -51,11 +48,11 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     // Intelligent debounce:
     // If the same barcode is scanned: ignore if within 2000ms
-    // If a different barcode is scanned: allow after only 400ms for fast shelf scanning
+    // If a different barcode is scanned: allow after only 450ms for fast shelf scanning
     if (cleanCode === prevCode && now - prevTime < 2000) {
       return;
     }
-    if (cleanCode !== prevCode && now - prevTime < 400) {
+    if (cleanCode !== prevCode && now - prevTime < 450) {
       return;
     }
 
@@ -66,45 +63,39 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     toastTimerRef.current = window.setTimeout(() => setLastScannedCode(null), 2500);
     setScanCount(prev => prev + 1);
 
-    // Call onScan (handleScan will play beep and show toast)
+    // Immediate sound feedback
+    sound.playSuccessBeep();
+
+    // Notify parent
     onScan(cleanCode);
   }, [onScan]);
 
-  // Clean stop for all camera engines and hardware tracks
+  // Clean stop for camera hardware and scanner instance
   const stopScanner = useCallback(async () => {
-    // 1. Stop Native BarcodeDetector loop & stream
-    if (nativeScanTimerRef.current) {
-      window.clearInterval(nativeScanTimerRef.current);
-      nativeScanTimerRef.current = null;
-    }
-    if (nativeStreamRef.current) {
-      nativeStreamRef.current.getTracks().forEach(track => track.stop());
-      nativeStreamRef.current = null;
-    }
-    if (nativeVideoRef.current) {
-      nativeVideoRef.current.srcObject = null;
-    }
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
 
-    // 2. Stop Html5Qrcode fallback
-    if (scannerRef.current) {
-      try {
-        if (scannerRef.current.isScanning) {
-          await scannerRef.current.stop();
-        }
-        await scannerRef.current.clear();
-      } catch (err) {
-        console.warn('Error stopping fallback scanner:', err);
-      } finally {
+    try {
+      if (scannerRef.current) {
+        const scanner = scannerRef.current;
         scannerRef.current = null;
+        if (scanner.isScanning) {
+          await scanner.stop();
+        }
+        await scanner.clear();
       }
+    } catch (err) {
+      console.warn('Error stopping scanner:', err);
     }
 
-    // 3. Guarantee all hardware tracks are stopped immediately
+    // Guarantee all hardware tracks are stopped immediately
     try {
       const videoElem = document.querySelector(`#${readerElementId} video`) as HTMLVideoElement;
       if (videoElem && videoElem.srcObject) {
         const stream = videoElem.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach(track => {
+          try { track.stop(); } catch {}
+        });
         videoElem.srcObject = null;
       }
     } catch {}
@@ -112,162 +103,37 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     setIsScanning(false);
     setIsStarting(false);
     setTorchOn(false);
+    isStoppingRef.current = false;
   }, []);
 
-  // Enumerate cameras for switcher
-  const enumerateCameras = useCallback(async () => {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices
-          .filter(d => d.kind === 'videoinput')
-          .map((d, idx) => ({
-            id: d.deviceId,
-            label: d.label || `កាមេរ៉ា ${idx + 1}`
-          }));
-
-        if (videoDevices.length > 0) {
-          setCameras(videoDevices);
-          if (!selectedCameraId) {
-            const rear = videoDevices.find(d =>
-              d.label.toLowerCase().includes('back') ||
-              d.label.toLowerCase().includes('rear') ||
-              d.label.toLowerCase().includes('environment') ||
-              d.label.toLowerCase().includes('0')
-            );
-            setSelectedCameraId(rear ? rear.id : videoDevices[0].id);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Camera enumeration error:', e);
-    }
-  }, [selectedCameraId]);
-
-  // Main launcher: Prioritizes Native 60 FPS Hardware BarcodeDetector
+  // Main launcher with robust device fallback
   const startScanner = useCallback(async (cameraIdToUse?: string) => {
-    await stopScanner();
-    setErrorMsg(null);
+    if (isStartingRef.current) return;
+    isStartingRef.current = true;
     setIsStarting(true);
+    setErrorMsg(null);
     sound.warmup();
 
+    // Stop previous instance if running
+    await stopScanner();
+
     // Check secure context (HTTPS / localhost requirement for mobile cameras)
-    if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost') {
+    if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       setErrorMsg({
         title: 'ត្រូវការ HTTPS ដើម្បីបើកកាមេរ៉ា',
-        desc: 'កម្មវិធីរុករក (Safari/Chrome) តម្រូវឱ្យប្រើប្រាស់ HTTPS មានសុវត្ថិភាព។ សូមចូលតាមរយៈ https:// ឧទាហរណ៍ Vercel deployment។'
+        desc: 'កម្មវិធីរុករកតម្រូវឱ្យប្រើប្រាស់ HTTPS មានសុវត្ថិភាព។ សូមចូលតាមរយៈ https:// ឧទាហរណ៍ Vercel deployment។'
       });
       setIsStarting(false);
+      isStartingRef.current = false;
       return;
     }
 
-    // =========================================================================
-    // ⚡ ENGINE 1: NATIVE HARDWARE ACCELERATED BARCODE DETECTOR (Android & iOS 17+)
-    // =========================================================================
-    const hasNativeBarcodeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
-
-    if (hasNativeBarcodeDetector) {
-      try {
-        let formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
-        try {
-          const supported = await (window as any).BarcodeDetector.getSupportedFormats?.();
-          if (Array.isArray(supported) && supported.length > 0) {
-            formats = formats.filter(f => supported.includes(f));
-          }
-        } catch {}
-
-        const detector = new (window as any).BarcodeDetector({ formats });
-
-        // Smooth 720p stream prevents mobile CPU/GPU choking
-        const constraints: MediaStreamConstraints = {
-          video: cameraIdToUse
-            ? {
-                deviceId: { exact: cameraIdToUse },
-                width: { ideal: 1280, max: 1920 },
-                height: { ideal: 720, max: 1080 }
-              }
-            : {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1280, max: 1920 },
-                height: { ideal: 720, max: 1080 }
-              },
-          audio: false
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        if (!isOpenRef.current) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-
-        nativeStreamRef.current = stream;
-        setEngineType('native');
-
-        if (nativeVideoRef.current) {
-          nativeVideoRef.current.srcObject = stream;
-          nativeVideoRef.current.setAttribute('playsinline', 'true');
-          nativeVideoRef.current.setAttribute('webkit-playsinline', 'true');
-          await nativeVideoRef.current.play();
-        }
-
-        // Check torch capabilities
-        const track = stream.getVideoTracks()[0];
-        if (track && (track as any).getCapabilities) {
-          try {
-            const capabilities = (track as any).getCapabilities();
-            setHasTorch(Boolean(capabilities && 'torch' in capabilities));
-          } catch {
-            setHasTorch(false);
-          }
-        }
-
-        // Hardware-accelerated scan loop:
-        // Runs in <5ms every 90ms, while video preview runs at 60 FPS silky smooth!
-        let isDetecting = false;
-        nativeScanTimerRef.current = window.setInterval(async () => {
-          if (!isOpenRef.current || isDetecting || !nativeVideoRef.current) return;
-          if (nativeVideoRef.current.readyState < 2) return;
-
-          try {
-            isDetecting = true;
-            const barcodes = await detector.detect(nativeVideoRef.current);
-            if (barcodes && barcodes.length > 0) {
-              const code = barcodes[0].rawValue;
-              if (code) {
-                handleBarcodeDecoded(code);
-              }
-            }
-          } catch {
-            // Ignore non-barcode frame detection errors
-          } finally {
-            isDetecting = false;
-          }
-        }, 90);
-
-        setIsScanning(true);
-        setIsStarting(false);
-        enumerateCameras();
-        return;
-      } catch (nativeErr) {
-        console.warn('Native BarcodeDetector stream failed, falling back to Html5Qrcode:', nativeErr);
-        if (nativeStreamRef.current) {
-          nativeStreamRef.current.getTracks().forEach(t => t.stop());
-          nativeStreamRef.current = null;
-        }
-      }
-    }
-
-    // =========================================================================
-    // 🛡️ ENGINE 2: OPTIMIZED HTML5-QRCODE FALLBACK (Older Browsers)
-    // =========================================================================
     const elem = document.getElementById(readerElementId);
     if (!elem) {
       setIsStarting(false);
+      isStartingRef.current = false;
       return;
     }
-
-    setEngineType('html5');
 
     try {
       const html5QrCode = new Html5Qrcode(readerElementId, {
@@ -282,54 +148,68 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         ],
         verbose: false,
         experimentalFeatures: {
-          useBarCodeDetectorIfSupported: false // Avoid dual alternating overhead
+          useBarCodeDetectorIfSupported: true // Native hardware acceleration on iOS & Android
         }
       });
       scannerRef.current = html5QrCode;
 
-      // html5-qrcode strictly requires cameraIdOrConfig to have exactly 1 key ({ facingMode: 'environment' } or { deviceId: '...' })
-      const cameraConfig = cameraIdToUse
-        ? { deviceId: cameraIdToUse }
-        : { facingMode: 'environment' };
-
+      // Scan config: 20 FPS, full-frame decode (no qrbox to prevent coordinate offset & duplicate frames)
       const config = {
-        fps: 15, // 15 FPS provides responsive scanning without stutter
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const w = Math.min(Math.floor(viewfinderWidth * 0.85), 320);
-          const h = Math.min(Math.floor(viewfinderHeight * 0.40), 160);
-          return { width: Math.max(160, w), height: Math.max(90, h) };
-        },
-        aspectRatio: 1.777778,
+        fps: 20,
         disableFlip: false
       };
 
-      await html5QrCode.start(
-        cameraConfig,
-        config,
-        (decodedText) => handleBarcodeDecoded(decodedText),
-        () => {} // Silent ignore
-      );
+      // Camera selector: if cameraIdToUse is provided, use exact deviceId;
+      // otherwise, try environment (back) camera first.
+      const initialCameraConfig = cameraIdToUse
+        ? { deviceId: cameraIdToUse }
+        : { facingMode: 'environment' };
+
+      try {
+        await html5QrCode.start(
+          initialCameraConfig,
+          config,
+          (decodedText) => handleBarcodeDecoded(decodedText),
+          () => {} // Silent ignore frame without barcode
+        );
+      } catch (firstErr) {
+        console.warn('Initial camera start failed, attempting fallback camera:', firstErr);
+        // Fallback for PC / Laptops with only front webcam or USB webcam
+        if (!cameraIdToUse) {
+          try {
+            await html5QrCode.start(
+              { facingMode: 'user' },
+              config,
+              (decodedText) => handleBarcodeDecoded(decodedText),
+              () => {}
+            );
+          } catch {
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              await html5QrCode.start(
+                { deviceId: devices[0].id },
+                config,
+                (decodedText) => handleBarcodeDecoded(decodedText),
+                () => {}
+              );
+            } else {
+              throw firstErr;
+            }
+          }
+        } else {
+          throw firstErr;
+        }
+      }
 
       if (!isOpenRef.current) {
-        try {
-          if (html5QrCode.isScanning) await html5QrCode.stop();
-          await html5QrCode.clear();
-        } catch {}
-        try {
-          const videoElem = document.querySelector(`#${readerElementId} video`) as HTMLVideoElement;
-          if (videoElem && videoElem.srcObject) {
-            const stream = videoElem.srcObject as MediaStream;
-            stream.getTracks().forEach(track => track.stop());
-            videoElem.srcObject = null;
-          }
-        } catch {}
+        await stopScanner();
         return;
       }
 
       setIsScanning(true);
       setIsStarting(false);
 
-      // Check torch capabilities
+      // Check flashlight / torch capabilities
       try {
         const capabilities = html5QrCode.getRunningTrackCapabilities();
         setHasTorch(Boolean(capabilities && 'torch' in capabilities));
@@ -337,7 +217,15 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         setHasTorch(false);
       }
 
-      enumerateCameras();
+      // Populate available cameras for switcher
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setCameras(devices.map((d, i) => ({ id: d.id, label: d.label || `កាមេរ៉ា ${i + 1}` })));
+        }
+      } catch (e) {
+        console.warn('Camera enumeration error:', e);
+      }
     } catch (err: unknown) {
       console.error('Camera start error:', err);
       setIsScanning(false);
@@ -379,13 +267,14 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
           desc: err instanceof Error ? err.message : String(err)
         });
       }
+    } finally {
+      isStartingRef.current = false;
     }
-  }, [handleBarcodeDecoded, stopScanner, enumerateCameras]);
+  }, [handleBarcodeDecoded, stopScanner]);
 
-  // Initial load when modal opens & Escape key listener
+  // Modal open/close lifecycle - only depends on isOpen to avoid infinite re-render loops
   useEffect(() => {
     if (isOpen) {
-      enumerateCameras();
       startScanner();
     } else {
       stopScanner();
@@ -403,45 +292,35 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       stopScanner();
     };
-  }, [isOpen, startScanner, stopScanner, onClose]);
+  }, [isOpen]); // Strict dependency to prevent re-render jumps!
 
   // Toggle torch / flashlight
   const toggleTorch = async () => {
-    if (!hasTorch) return;
+    if (!hasTorch || !scannerRef.current) return;
     const nextState = !torchOn;
-
-    if (engineType === 'native' && nativeStreamRef.current) {
-      const track = nativeStreamRef.current.getVideoTracks()[0];
-      if (track) {
-        try {
-          await (track as any).applyConstraints({
-            advanced: [{ torch: nextState }]
-          });
-          setTorchOn(nextState);
-        } catch (err) {
-          console.warn('Native torch error:', err);
-        }
-      }
-    } else if (scannerRef.current) {
-      try {
-        await scannerRef.current.applyVideoConstraints({
-          advanced: [{ torch: nextState } as MediaTrackConstraintSet]
-        });
-        setTorchOn(nextState);
-      } catch (err) {
-        console.warn('Fallback torch error:', err);
-      }
+    try {
+      await scannerRef.current.applyVideoConstraints({
+        advanced: [{ torch: nextState } as MediaTrackConstraintSet]
+      });
+      setTorchOn(nextState);
+    } catch (err) {
+      console.warn('Torch toggle error:', err);
     }
   };
 
-  // Switch between available cameras
-  const handleSwitchCamera = () => {
+  // Switch camera cleanly
+  const handleCameraChange = async (cameraId: string) => {
+    setSelectedCameraId(cameraId);
+    await startScanner(cameraId);
+  };
+
+  const handleNextCamera = async () => {
     if (cameras.length < 2) return;
     const currentIndex = cameras.findIndex(c => c.id === selectedCameraId);
     const nextIndex = (currentIndex + 1) % cameras.length;
     const nextCam = cameras[nextIndex];
     setSelectedCameraId(nextCam.id);
-    startScanner(nextCam.id);
+    await startScanner(nextCam.id);
   };
 
   if (!isOpen) return null;
@@ -459,12 +338,6 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-sm sm:text-base">ស្កេន Barcode តាមទូរស័ព្ទ</h3>
-                {engineType === 'native' && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    <span>Smooth 60FPS</span>
-                  </span>
-                )}
                 {scanCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-bold">
                     {scanCount} មុខ
@@ -485,30 +358,21 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
         {/* Camera Video Viewport */}
         <div className="relative flex-1 bg-black flex items-center justify-center min-h-[320px] sm:min-h-[380px] overflow-hidden">
-          {/* Native Hardware Video (Primary Smooth Engine) */}
-          <video
-            ref={nativeVideoRef}
-            playsInline
-            autoPlay
-            muted
-            className={`w-full h-full object-cover ${engineType === 'native' ? 'block' : 'hidden'}`}
-          />
-
-          {/* html5-qrcode container (Fallback Engine) */}
+          {/* Main Camera Video Container */}
           <div
             id={readerElementId}
-            className={`w-full h-full ${engineType === 'html5' ? 'block' : 'hidden'}`}
+            className="w-full h-full"
           />
 
           {/* Loading Indicator */}
           {isStarting && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-20 text-white gap-3">
               <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
-              <p className="text-xs text-slate-300 font-medium">កំពុងបើកដំណើរការកាមេរ៉ា (Hardware Accelerated)...</p>
+              <p className="text-xs text-slate-300 font-medium">កំពុងបើកដំណើរការកាមេរ៉ា...</p>
             </div>
           )}
 
-          {/* Scan Target Box & Red Laser Indicator */}
+          {/* Clean Unified Viewfinder Box & Red Laser Scanning Line */}
           {isScanning && !errorMsg && (
             <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4 z-10">
               <div className="relative w-full max-w-[280px] h-40 border-2 border-blue-500/80 rounded-2xl shadow-[0_0_25px_rgba(59,130,246,0.35)] flex flex-col justify-between p-2">
@@ -571,7 +435,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
           {cameras.length > 1 ? (
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
               <button
-                onClick={handleSwitchCamera}
+                onClick={handleNextCamera}
                 title="ប្តូរកាមេរ៉ា (Switch Camera)"
                 className="p-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 active:scale-95 transition shrink-0"
               >
@@ -579,10 +443,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
               </button>
               <select
                 value={selectedCameraId}
-                onChange={(e) => {
-                  setSelectedCameraId(e.target.value);
-                  startScanner(e.target.value);
-                }}
+                onChange={(e) => handleCameraChange(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-xs rounded-xl px-2.5 py-2.5 text-slate-200 focus:outline-none truncate"
               >
                 {cameras.map((cam, idx) => (

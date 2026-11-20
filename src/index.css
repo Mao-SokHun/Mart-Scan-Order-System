@@ -19,6 +19,7 @@
   align-items: center !important;
   justify-content: center !important;
   overflow: hidden !important;
+  background-color: #000000 !important;
 }
 
 #camera-barcode-reader video {
@@ -28,8 +29,15 @@
   border-radius: 0 !important;
 }
 
-#camera-barcode-reader #qr-shaded-region {
-  border-color: rgba(0, 0, 0, 0.45) !important;
+/* Hide all internal html5-qrcode overlays, white corner brackets, and shaded regions */
+#camera-barcode-reader #qr-shaded-region,
+#camera-barcode-reader div[style*="border-style: solid"],
+#camera-barcode-reader div[style*="border: 5px solid"],
+#camera-barcode-reader div[style*="border-width: 5px"],
+#camera-barcode-reader #qr-shaded-region > div {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
 /* Print Styles for Purchase Order */
