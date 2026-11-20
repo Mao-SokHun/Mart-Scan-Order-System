@@ -27,6 +27,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [minStock, setMinStock] = useState('24');
   const [supplierName, setSupplierName] = useState('');
   const [supplierPhone, setSupplierPhone] = useState('');
+  const [remark, setRemark] = useState('');
   const [addToOrderNow, setAddToOrderNow] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -40,6 +41,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setMinStock('24');
     setSupplierName('');
     setSupplierPhone('');
+    setRemark('');
     setIsSubmitting(false);
   };
 
@@ -82,6 +84,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       minStock: Math.max(0, parseInt(minStock, 10) || 10),
       supplierName: supplierName.trim() || 'ទូទៅ (General Supplier)',
       supplierPhone: supplierPhone.trim() || undefined,
+      remark: remark.trim() || undefined,
+      storageTemp,
       image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop&q=80'
     };
 
@@ -262,6 +266,19 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              កំណត់សម្គាល់ដឹកជញ្ជូន (Remark / Delivery)
+            </label>
+            <input
+              type="text"
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              placeholder="ឧ. Delivery on Thu, Lead Time 2 Week..."
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+            />
           </div>
 
           <div className="pt-2">

@@ -10,13 +10,22 @@ export const getCurrentDayOfWeek = (): OrderDay => {
   return days[dayIndex] || 'Thu';
 };
 
-// Helper to determine storage temperature from category and product name
-const extractStorageTemp = (category: string, prodName?: string): string => {
+// Helper to determine storage temperature from category, product name, or explicit property
+const extractStorageTemp = (category: string, prodName?: string, explicitTemp?: string): string => {
+  if (explicitTemp && ['Dry', 'Chilled', 'Frozen'].includes(explicitTemp)) {
+    return explicitTemp;
+  }
   const cat = (category || '').toLowerCase();
+  // 1. Explicit temperature in category string e.g. "Daily (Dry)", "Fresh (Chilled)", "(Frozen)"
+  if (cat.includes('(dry)') || cat.includes('dry') || cat.includes('ស្ងួត') || cat.includes('ក្រៀម')) return 'Dry';
+  if (cat.includes('(chilled)') || cat.includes('chilled') || cat.includes('ត្រជាក់')) return 'Chilled';
+  if (cat.includes('(frozen)') || cat.includes('frozen') || cat.includes('កក')) return 'Frozen';
+
+  // 2. Fallback heuristic from product name only if category had no temperature info
   const name = (prodName || '').toLowerCase();
-  if (cat.includes('frozen') || name.includes('frozen') || name.includes('កក')) return 'Frozen';
-  if (cat.includes('chilled') || name.includes('chilled') || cat.includes('ត្រជាក់') || cat.includes('ទឹកដោះគោ') || cat.includes('dairy') || cat.includes('milk') || cat.includes('yogurt')) return 'Chilled';
-  if (cat.includes('dry') || cat.includes('ស្ងួត') || cat.includes('ក្រៀម')) return 'Dry';
+  if (name.includes('frozen') || name.includes('កក')) return 'Frozen';
+  if (name.includes('chilled') || name.includes('ត្រជាក់') || name.includes('ទឹកដោះគោ') || name.includes('dairy') || name.includes('milk') || name.includes('yogurt')) return 'Chilled';
+
   return 'Dry';
 };
 
@@ -106,7 +115,7 @@ export const exportDailyPlanExcel = (
   };
 
   filteredItems.forEach(item => {
-    const temp = extractStorageTemp(item.product.category, item.product.name);
+    const temp = extractStorageTemp(item.product.category, item.product.name, item.product.storageTemp);
     const sheet = extractSheetName(item.product.category);
     const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
     const finalRemark = item.product.remark || remark;

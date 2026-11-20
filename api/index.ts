@@ -208,9 +208,17 @@ export const initDb = async () => {
           supplier_name VARCHAR(255),
           supplier_phone VARCHAR(64),
           image TEXT,
+          remark TEXT,
+          storage_temp VARCHAR(64),
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+
+      // Ensure new columns exist on older existing products tables
+      await client.query(`
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS remark TEXT;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS storage_temp VARCHAR(64);
       `);
 
       // 2. Create restock_items table
@@ -324,6 +332,8 @@ const mapProduct = (row: any) => ({
   minStock: safeInt(row.min_stock, 10),
   supplierName: row.supplier_name || 'ទូទៅ (General Supplier)',
   supplierPhone: row.supplier_phone || undefined,
+  remark: row.remark || undefined,
+  storageTemp: row.storage_temp || undefined,
   image: row.image || undefined,
   createdAt: row.created_at,
   updatedAt: row.updated_at
@@ -430,7 +440,7 @@ app.post('/api/products', async (req: Request, res: Response) => {
     const {
       barcode, name, khmerName, category, unit,
       costPrice, sellingPrice, currentStock, minStock,
-      supplierName, supplierPhone, image
+      supplierName, supplierPhone, image, remark, storageTemp
     } = req.body || {};
 
     let cleanBarcode = String(barcode || '').trim();
@@ -455,8 +465,8 @@ app.post('/api/products', async (req: Request, res: Response) => {
       INSERT INTO products (
         id, barcode, name, khmer_name, category, unit,
         cost_price, selling_price, current_stock, min_stock,
-        supplier_name, supplier_phone, image
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        supplier_name, supplier_phone, image, remark, storage_temp
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *;
     `, [
       id, cleanBarcode, cleanName, khmerName ? String(khmerName).trim() : null,
@@ -464,7 +474,7 @@ app.post('/api/products', async (req: Request, res: Response) => {
       roundMoney(Math.max(0, safeFloat(costPrice, 0))), roundMoney(Math.max(0, safeFloat(sellingPrice, 0))),
       Math.max(0, safeInt(currentStock, 0)), Math.max(0, safeInt(minStock, 10)),
       supplierName ? String(supplierName).trim() : 'ទូទៅ (General Supplier)', supplierPhone ? String(supplierPhone).trim() : null,
-      image || null
+      image || null, remark ? String(remark).trim() : null, storageTemp ? String(storageTemp).trim() : null
     ]);
 
     res.status(201).json(mapProduct(result.rows[0]));
@@ -481,7 +491,7 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
     const {
       name, khmerName, category, unit,
       costPrice, sellingPrice, currentStock, minStock,
-      supplierName, supplierPhone, image
+      supplierName, supplierPhone, image, remark, storageTemp
     } = req.body || {};
 
     const existing = await pool.query(
@@ -507,8 +517,10 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
           supplier_name = COALESCE($9, supplier_name),
           supplier_phone = COALESCE($10, supplier_phone),
           image = COALESCE($11, image),
+          remark = COALESCE($12, remark),
+          storage_temp = COALESCE($13, storage_temp),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $12
+      WHERE id = $14
       RETURNING *;
     `, [
       name ? String(name).trim() : null,
@@ -522,6 +534,8 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
       supplierName ? String(supplierName).trim() : null,
       supplierPhone !== undefined ? (supplierPhone ? String(supplierPhone).trim() : null) : null,
       image !== undefined ? (image || null) : null,
+      remark !== undefined ? (remark ? String(remark).trim() : null) : null,
+      storageTemp !== undefined ? (storageTemp ? String(storageTemp).trim() : null) : null,
       targetId
     ]);
 
@@ -575,8 +589,8 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
         INSERT INTO products (
           id, barcode, name, khmer_name, category, unit,
           cost_price, selling_price, current_stock, min_stock,
-          supplier_name, supplier_phone, image
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          supplier_name, supplier_phone, image, remark, storage_temp
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT (barcode) DO UPDATE SET
           name = EXCLUDED.name,
           khmer_name = COALESCE(EXCLUDED.khmer_name, products.khmer_name),
@@ -587,6 +601,8 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
           current_stock = EXCLUDED.current_stock,
           min_stock = EXCLUDED.min_stock,
           supplier_name = COALESCE(EXCLUDED.supplier_name, products.supplier_name),
+          remark = COALESCE(EXCLUDED.remark, products.remark),
+          storage_temp = COALESCE(EXCLUDED.storage_temp, products.storage_temp),
           updated_at = CURRENT_TIMESTAMP;
       `, [
         id, targetBarcode, String(p.name).trim(), p.khmerName ? String(p.khmerName).trim() : null,
@@ -594,7 +610,7 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
         Math.max(0, safeFloat(p.costPrice, 0)), Math.max(0, safeFloat(p.sellingPrice, 0)),
         Math.max(0, safeInt(p.currentStock, 0)), Math.max(0, safeInt(p.minStock, 10)),
         p.supplierName ? String(p.supplierName).trim() : 'ទូទៅ (General Supplier)', p.supplierPhone ? String(p.supplierPhone).trim() : null,
-        p.image || null
+        p.image || null, p.remark ? String(p.remark).trim() : null, p.storageTemp ? String(p.storageTemp).trim() : null
       ]);
       insertedCount++;
     }
@@ -616,7 +632,7 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
         r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
         p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
         p.cost_price, p.selling_price, p.current_stock, p.min_stock,
-        p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
+        p.supplier_name, p.supplier_phone, p.remark, p.storage_temp, p.image, p.created_at, p.updated_at
       FROM restock_items r
       JOIN products p ON r.product_id = p.id
       ORDER BY r.scanned_at DESC;
@@ -662,7 +678,7 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
           r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
           p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
           p.cost_price, p.selling_price, p.current_stock, p.min_stock,
-          p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
+          p.supplier_name, p.supplier_phone, p.remark, p.storage_temp, p.image, p.created_at, p.updated_at
         FROM restock_items r
         JOIN products p ON r.product_id = p.id
         WHERE r.id = $1;
@@ -700,7 +716,7 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
         r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
         p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
         p.cost_price, p.selling_price, p.current_stock, p.min_stock,
-        p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
+        p.supplier_name, p.supplier_phone, p.remark, p.storage_temp, p.image, p.created_at, p.updated_at
       FROM restock_items r
       JOIN products p ON r.product_id = p.id
       WHERE r.id = $1;
@@ -837,7 +853,7 @@ app.post('/api/restock/batch', async (req: Request, res: Response) => {
         r.id, r.order_quantity, r.unit_cost, r.total_cost, r.scanned_at, r.status, r.note,
         p.id as product_id, p.barcode, p.name, p.khmer_name, p.category, p.unit,
         p.cost_price, p.selling_price, p.current_stock, p.min_stock,
-        p.supplier_name, p.supplier_phone, p.image, p.created_at, p.updated_at
+        p.supplier_name, p.supplier_phone, p.remark, p.storage_temp, p.image, p.created_at, p.updated_at
       FROM restock_items r
       JOIN products p ON r.product_id = p.id
       ORDER BY r.scanned_at DESC;

@@ -12,6 +12,7 @@ export interface Product {
   supplierName: string;
   supplierPhone?: string;
   remark?: string;
+  storageTemp?: 'Dry' | 'Chilled' | 'Frozen' | string;
   image?: string;
 }
 

@@ -385,6 +385,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   // Initial load when modal opens & Escape key listener
   useEffect(() => {
     if (isOpen) {
+      enumerateCameras();
       startScanner();
     } else {
       stopScanner();

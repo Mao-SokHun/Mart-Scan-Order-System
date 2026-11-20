@@ -343,6 +343,11 @@ export const App: React.FC = () => {
   // Clear all items
   const handleClearAll = async () => {
     if (window.confirm('តើអ្នកពិតជាចង់សម្អាតតារាងបញ្ជាទិញនេះទាំងអស់មែនទេ?')) {
+      // Clear all active timers to prevent pending debounced updates from resurrecting cleared items
+      debounceTimersRef.current.forEach(timer => clearTimeout(timer));
+      debounceTimersRef.current.clear();
+      pendingUpdatesRef.current.clear();
+
       setRestockItems([]);
       showToast('បានសម្អាតតារាងបញ្ជាទិញរួចរាល់', 'info');
 
@@ -408,6 +413,18 @@ export const App: React.FC = () => {
 
   // Delete product from catalog
   const handleDeleteProduct = async (productId: string) => {
+    // Clear any pending debounce timers for restock items matching this product
+    restockItems.forEach(i => {
+      if (i.product.id === productId || i.id === productId) {
+        if (debounceTimersRef.current.has(i.id)) {
+          clearTimeout(debounceTimersRef.current.get(i.id)!);
+          debounceTimersRef.current.delete(i.id);
+        }
+        pendingUpdatesRef.current.delete(i.id);
+        pendingUpdatesRef.current.delete(productId);
+      }
+    });
+
     const target = products.find(p => p.id === productId);
     const prodName = target ? target.name : '';
 

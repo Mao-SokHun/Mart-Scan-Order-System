@@ -26,6 +26,8 @@ interface ParsedProductRow {
   minStock: number;
   supplierName: string;
   supplierPhone?: string;
+  remark?: string;
+  storageTemp?: string;
   sheetName: string;
   isExisting: boolean;
 }
@@ -213,6 +215,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             minStock,
             supplierName,
             supplierPhone,
+            remark: cleanRemark || undefined,
+            storageTemp: rawTemp || undefined,
             sheetName: sheetName.trim(),
             isExisting: existingBarcodeMap.has(cleanBarcodeKey)
           });
@@ -379,7 +383,9 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
           currentStock: row.currentStock,
           minStock: row.minStock,
           supplierName: row.supplierName,
-          supplierPhone: row.supplierPhone || localMerged[existingIdx].supplierPhone
+          supplierPhone: row.supplierPhone || localMerged[existingIdx].supplierPhone,
+          remark: row.remark || localMerged[existingIdx].remark,
+          storageTemp: row.storageTemp || localMerged[existingIdx].storageTemp
         };
         count++;
       } else {
@@ -395,7 +401,9 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
           currentStock: row.currentStock,
           minStock: row.minStock,
           supplierName: row.supplierName,
-          supplierPhone: row.supplierPhone
+          supplierPhone: row.supplierPhone,
+          remark: row.remark,
+          storageTemp: row.storageTemp
         };
         localMerged.push(newProd);
         barcodeMap.set(key, localMerged.length - 1);
@@ -423,7 +431,9 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
         currentStock: r.currentStock,
         minStock: r.minStock,
         supplierName: r.supplierName,
-        supplierPhone: r.supplierPhone
+        supplierPhone: r.supplierPhone,
+        remark: r.remark,
+        storageTemp: r.storageTemp
       }));
 
       const res = await fetch('/api/products/batch', {
