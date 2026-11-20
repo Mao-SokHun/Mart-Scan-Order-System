@@ -45,6 +45,18 @@
     overflow: visible !important;
   }
   
+  /* Ensure table headers repeat across multi-page prints and rows don't split */
+  thead {
+    display: table-header-group !important;
+  }
+  tfoot {
+    display: table-footer-group !important;
+  }
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
   /* Hide main app background, header, buttons, and mobile bottom bar when printing modal */
   header, footer, nav, button, main, .print\:hidden {
     display: none !important;

@@ -433,13 +433,13 @@ app.post('/api/products', async (req: Request, res: Response) => {
       supplierName, supplierPhone, image
     } = req.body || {};
 
-    if (!barcode || !name) {
-      return res.status(400).json({ error: 'Barcode and Name are required' });
-    }
-
-    let cleanBarcode = String(barcode).trim();
+    let cleanBarcode = String(barcode || '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
-    const cleanName = String(name).trim();
+    const cleanName = String(name || '').trim();
+
+    if (!cleanBarcode || !cleanName) {
+      return res.status(400).json({ error: 'Barcode and Name are required and cannot be empty' });
+    }
 
     // Check if barcode already exists (case-insensitive)
     const existing = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
@@ -564,10 +564,11 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
     await client.query('BEGIN');
     let insertedCount = 0;
     for (const p of items) {
-      if (!p.barcode || !p.name) continue;
-      let cleanBarcode = String(p.barcode).trim();
+      if (!p) continue;
+      let cleanBarcode = String(p.barcode || '').trim();
       if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
-      if (!cleanBarcode) continue;
+      let cleanName = String(p.name || '').trim();
+      if (!cleanBarcode || !cleanName) continue;
 
       // Check for existing product by case-insensitive barcode to ensure exact conflict target
       const existing = await client.query(
@@ -637,12 +638,11 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
 app.post('/api/restock/scan', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.body || {};
-    if (!barcode) {
-      return res.status(400).json({ error: 'Barcode is required' });
-    }
-
-    let cleanBarcode = String(barcode).trim();
+    let cleanBarcode = String(barcode || '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
+    if (!cleanBarcode) {
+      return res.status(400).json({ error: 'Barcode is required and cannot be empty' });
+    }
 
     // 1. Find product (case-insensitive for barcode matching)
     const prodRes = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);

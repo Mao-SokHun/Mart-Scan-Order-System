@@ -244,55 +244,104 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     }
   };
 
-  // Download a sample Excel template for users
+  // Download a sample Excel template for users matching Daily Plan multi-sheet format
   const handleDownloadTemplate = () => {
-    const sampleData = [
+    const wb = XLSX.utils.book_new();
+    const colWidths = [
+      { wch: 18 }, { wch: 18 }, { wch: 34 }, { wch: 22 },
+      { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 24 }
+    ];
+
+    const sheetsConfig = [
       {
-        'Item Code': '8851959132014',
-        'Name': 'Coca Cola Original Taste 330ml',
-        'Name in Khmer': 'កូកាកូឡា ៣៣០មល',
-        'Category': 'Daily',
-        'Purchase UoM': 'កំប៉ុង',
-        'Cost Price': 0.40,
-        'Selling Price': 0.60,
-        'Current Stock': 24,
-        'Min Stock': 48,
-        'Vendors/Vendor': 'Cambodia Beverage Company'
+        name: 'Daily',
+        data: [
+          {
+            'Storage Temperature': 'Dry',
+            'Item Code': '8851959132014',
+            'Name': 'Coca Cola Original Taste 330ml',
+            'Name in Khmer': 'កូកាកូឡា ៣៣០មល',
+            'Vendors/Vendor': 'Cambodia Beverage Company',
+            'Purchase UoM': 'កំប៉ុង',
+            'Cost Price': 0.40,
+            'Selling Price': 0.60,
+            'Current Stock': 24,
+            'Remark': 'Delivery on Thu'
+          },
+          {
+            'Storage Temperature': 'Dry',
+            'Item Code': '8841002010012',
+            'Name': 'Angkor Beer Can 330ml',
+            'Name in Khmer': 'ស្រាបៀរអង្គរ',
+            'Vendors/Vendor': 'Cambrew Ltd',
+            'Purchase UoM': 'កំប៉ុង',
+            'Cost Price': 0.55,
+            'Selling Price': 0.85,
+            'Current Stock': 12,
+            'Remark': 'Delivery on Thu'
+          }
+        ]
       },
       {
-        'Item Code': 'P0904040002',
-        'Name': 'Soma Egg (1Tray/30pcs)',
-        'Name in Khmer': 'ពងមាន់',
-        'Category': 'Fresh',
-        'Purchase UoM': 'Pack*30',
-        'Cost Price': 3.20,
-        'Selling Price': 4.00,
-        'Current Stock': 0,
-        'Min Stock': 10,
-        'Vendors/Vendor': 'SM'
+        name: 'Bakery and Cake',
+        data: [
+          {
+            'Storage Temperature': 'Frozen',
+            'Item Code': 'C0101010508',
+            'Name': 'Raw Croissant Frozen Large Pack*5*90g',
+            'Name in Khmer': 'នំកក',
+            'Vendors/Vendor': 'FF2',
+            'Purchase UoM': 'Units',
+            'Cost Price': 1.50,
+            'Selling Price': 2.25,
+            'Current Stock': 0,
+            'Remark': 'Delivery Thu'
+          }
+        ]
       },
       {
-        'Item Code': '8841002010012',
-        'Name': 'Angkor Beer Can 330ml',
-        'Name in Khmer': 'ស្រាបៀរអង្គរ',
-        'Category': 'Daily',
-        'Purchase UoM': 'កំប៉ុង',
-        'Cost Price': 0.55,
-        'Selling Price': 0.85,
-        'Current Stock': 12,
-        'Min Stock': 24,
-        'Vendors/Vendor': 'Cambrew Ltd'
+        name: 'Fresh',
+        data: [
+          {
+            'Storage Temperature': 'Dry',
+            'Item Code': 'P0904040002',
+            'Name': 'Soma Egg (1Tray/30pcs)',
+            'Name in Khmer': 'ពងមាន់',
+            'Vendors/Vendor': 'SM',
+            'Purchase UoM': 'Pack*30',
+            'Cost Price': 3.20,
+            'Selling Price': 4.00,
+            'Current Stock': 0,
+            'Remark': 'Delivery on Thu'
+          }
+        ]
+      },
+      {
+        name: ' Milk and Yogurt',
+        data: [
+          {
+            'Storage Temperature': 'Chilled',
+            'Item Code': 'P0401020063',
+            'Name': 'Dalat Aloe Vera Yogurt 100Gx40C',
+            'Name in Khmer': 'យ៉ាអួរ ដាលាត',
+            'Vendors/Vendor': 'Dalat',
+            'Purchase UoM': 'Ctn*40',
+            'Cost Price': 12.00,
+            'Selling Price': 15.00,
+            'Current Stock': 0,
+            'Remark': 'Lead Time 2 Week'
+          }
+        ]
       }
     ];
 
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    ws['!cols'] = [
-      { wch: 18 }, { wch: 32 }, { wch: 22 }, { wch: 16 },
-      { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
-      { wch: 12 }, { wch: 26 }
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    sheetsConfig.forEach(sc => {
+      const ws = XLSX.utils.json_to_sheet(sc.data);
+      ws['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, ws, sc.name);
+    });
+
     XLSX.writeFile(wb, 'Mart_Products_Import_Template.xlsx');
   };
 

@@ -132,12 +132,29 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadDataFromDatabase();
+
+    const handleOnline = () => {
+      console.log('🌐 Browser online detected, re-syncing with Neon DB...');
+      loadDataFromDatabase();
+    };
+    window.addEventListener('online', handleOnline);
+
     // Poll db health every 30s
     const interval = setInterval(async () => {
       const health = await api.checkHealth();
-      setDbStatus(health);
+      setDbStatus(prev => {
+        // If connection just restored from offline, automatically sync with DB!
+        if (!prev.connected && health.connected) {
+          loadDataFromDatabase();
+        }
+        return health;
+      });
     }, 30000);
-    return () => clearInterval(interval);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
   }, [loadDataFromDatabase]);
 
   // Synchronize state with LocalStorage for offline resilience

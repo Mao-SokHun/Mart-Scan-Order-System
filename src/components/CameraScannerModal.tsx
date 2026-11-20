@@ -138,11 +138,11 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
       // On iOS & Android, prefer facingMode 'environment' on initial launch for main rear camera
       const cameraConfig = cameraIdToUse
-        ? { deviceId: { exact: cameraIdToUse } }
+        ? { deviceId: cameraIdToUse }
         : { facingMode: 'environment' };
 
       const config = {
-        fps: 20, // 20 frames per second for fluid scanning
+        fps: 15, // 15 fps is optimal for mobile hardware battery and smooth scanning
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           // Optimized rectangular scan box that never exceeds viewfinder
           const maxW = Math.max(160, viewfinderWidth - 20);
