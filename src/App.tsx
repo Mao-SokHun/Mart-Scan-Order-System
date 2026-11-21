@@ -503,23 +503,11 @@ export const App: React.FC = () => {
               <Store className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <h1 className="font-extrabold text-xs sm:text-base text-slate-900 tracking-tight truncate">
-                  Mart Scan & Order
-                </h1>
-                {/* Neon PostgreSQL Badge */}
-                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold border shrink-0 ${
-                  dbStatus.connected 
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                    : 'bg-amber-50 border-amber-200 text-amber-700'
-                }`}>
-                  <Database className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span>{dbStatus.connected ? 'Neon DB' : 'Connecting...'}</span>
-                  {dbStatus.connected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>}
-                </div>
-              </div>
+              <h1 className="font-extrabold text-xs sm:text-base text-slate-900 tracking-tight truncate">
+                Mart Scan & Order
+              </h1>
               <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium hidden sm:block truncate">
-                ប្រព័ន្ធស្កេនទំនិញអស់ស្តុក និងចេញតារាងបញ្ជាទិញ (Cloud Database)
+                ប្រព័ន្ធស្កេនទំនិញអស់ស្តុក និងចេញតារាងបញ្ជាទិញទំនិញ
               </p>
             </div>
           </div>
@@ -586,7 +574,7 @@ export const App: React.FC = () => {
             </span>
             <button
               onClick={loadDataFromDatabase}
-              title="ទាញយកទិន្នន័យពី Neon DB ឡើងវិញ"
+              title="ទាញយកទិន្នន័យឡើងវិញ (Refresh Data)"
               className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
