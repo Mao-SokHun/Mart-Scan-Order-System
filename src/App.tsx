@@ -8,7 +8,9 @@ import {
 import { 
   exportDailyPlanExcel, 
   exportToSimplePOExcel, 
-  copyToTelegramClipboard 
+  copyToTelegramClipboard,
+  OrderDay,
+  getCurrentDayOfWeek
 } from './utils/export';
 import { sound } from './utils/audio';
 import { useBarcodeGun } from './hooks/useBarcodeGun';
@@ -20,6 +22,7 @@ import { AddProductModal } from './components/AddProductModal';
 import { ProductCatalogModal } from './components/ProductCatalogModal';
 import { PrintPurchaseOrderModal } from './components/PrintPurchaseOrderModal';
 import { ImportProductsModal } from './components/ImportProductsModal';
+import { TelegramSendModal } from './components/TelegramSendModal';
 import { BarcodeCardTester } from './components/BarcodeCardTester';
 import { INITIAL_PRODUCTS } from './data/mockProducts';
 
@@ -41,6 +44,9 @@ export const App: React.FC = () => {
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isPrintPOOpen, setIsPrintPOOpen] = useState(false);
   const [isImportExcelOpen, setIsImportExcelOpen] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
+  const [telegramModalDay, setTelegramModalDay] = useState<OrderDay>(getCurrentDayOfWeek());
+  const [telegramModalSupplierFilter, setTelegramModalSupplierFilter] = useState<string>('all');
   const [notFoundBarcode, setNotFoundBarcode] = useState<string>('');
   const [showTestSheet, setShowTestSheet] = useState(false);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
@@ -681,6 +687,11 @@ export const App: React.FC = () => {
             if (ok) showToast('បានចម្លងអត្ថបទសម្រាប់ Telegram រួចរាល់!', 'success');
             return ok;
           }}
+          onOpenTelegramModal={(itemsToExport, day, filter) => {
+            setTelegramModalDay(day);
+            setTelegramModalSupplierFilter(filter || 'all');
+            setIsTelegramModalOpen(true);
+          }}
           onOpenPrintPO={() => setIsPrintPOOpen(true)}
         />
       </main>
@@ -754,6 +765,16 @@ export const App: React.FC = () => {
         isOpen={isPrintPOOpen}
         onClose={() => setIsPrintPOOpen(false)}
         items={restockItems}
+      />
+
+      {/* Telegram Direct Send Modal */}
+      <TelegramSendModal
+        isOpen={isTelegramModalOpen}
+        onClose={() => setIsTelegramModalOpen(false)}
+        items={restockItems}
+        orderDay={telegramModalDay}
+        supplierFilter={telegramModalSupplierFilter}
+        onShowToast={showToast}
       />
 
       {/* Mobile Sticky Bottom Bar (Thumb-friendly scanner and order total) */}

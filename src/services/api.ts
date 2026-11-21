@@ -146,5 +146,75 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to batch import products');
     return res.json();
+  },
+
+  // Telegram Bot integration methods
+  async getTelegramSettings(): Promise<{ chatId: string | null; botUsername: string; botLink: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/telegram/settings`);
+      if (!res.ok) throw new Error('Failed to fetch telegram settings');
+      return res.json();
+    } catch {
+      return {
+        chatId: null,
+        botUsername: 'Digital_Invitation_Link_bot',
+        botLink: 'https://t.me/Digital_Invitation_Link_bot'
+      };
+    }
+  },
+
+  async saveTelegramSettings(chatId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/telegram/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId })
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async getTelegramUpdates(): Promise<{ ok: boolean; chats: Array<{
+    id: string;
+    type: string;
+    name: string;
+    username: string;
+    lastActive: string;
+    lastText?: string;
+  }>; error?: string }> {
+    const res = await fetch(`${API_BASE_URL}/telegram/updates`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch Telegram updates');
+    }
+    return res.json();
+  },
+
+  async sendToTelegram(payload: {
+    chatId: string | number;
+    messageText?: string;
+    excelBase64?: string;
+    fileName?: string;
+    caption?: string;
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    documentSent?: boolean;
+    messageSent?: boolean;
+    chatId?: string;
+    error?: string;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/telegram/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({ error: 'Invalid response from server' }));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'បរាជ័យក្នុងការផ្ញើទៅ Telegram');
+    }
+    return data;
   }
 };

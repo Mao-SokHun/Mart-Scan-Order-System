@@ -16,6 +16,7 @@ interface RestockOrderTableProps {
   onExportExcel: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
   onExportSimplePO?: (itemsToExport: RestockItem[], supplierFilter?: string) => void;
   onCopyToTelegram: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void | boolean | Promise<boolean>;
+  onOpenTelegramModal?: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
   onOpenPrintPO: () => void;
 }
 
@@ -28,6 +29,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   onExportExcel,
   onExportSimplePO,
   onCopyToTelegram,
+  onOpenTelegramModal,
   onOpenPrintPO
 }) => {
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
@@ -119,6 +121,21 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
     if (res !== false) {
       setCopiedTelegram(true);
       setTimeout(() => setCopiedTelegram(false), 2000);
+    }
+  };
+
+  const handleTelegramClick = async () => {
+    if (filteredItems.length === 0) return;
+    if (zeroQtyCount > 0) {
+      const confirm = window.confirm(
+        `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្តផ្ញើទៅ Telegram ដែរឬទេ?`
+      );
+      if (!confirm) return;
+    }
+    if (onOpenTelegramModal) {
+      onOpenTelegramModal(filteredItems, orderDay, supplierFilter);
+    } else {
+      await handleCopyTelegram();
     }
   };
 
@@ -279,13 +296,13 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                 )}
 
                 <button
-                  onClick={handleCopyTelegram}
+                  onClick={handleTelegramClick}
                   disabled={filteredItems.length === 0}
                   className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-sky-50 hover:bg-sky-100 disabled:opacity-50 disabled:cursor-not-allowed text-sky-700 border border-sky-200 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
-                  title="ចម្លងអត្ថបទសម្រាប់ផ្ញើតាម Telegram"
+                  title="បាញ់ឯកសារ Excel និងបញ្ជីទំនិញទៅកាន់ Telegram"
                 >
-                  {copiedTelegram ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>{copiedTelegram ? 'បានចម្លង!' : 'Telegram'}</span>
+                  <Send className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Telegram</span>
                 </button>
 
                 <button

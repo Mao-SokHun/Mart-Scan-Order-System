@@ -259,6 +259,15 @@ export const initDb = async () => {
         );
       `);
 
+      // 4. Create app_settings table (stores telegram_chat_id, preferences, etc.)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key VARCHAR(64) PRIMARY KEY,
+          value TEXT,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
       // 4. Seed initial products if table is completely empty
       const countRes = await client.query('SELECT COUNT(*) FROM products;');
       const count = parseInt(countRes.rows[0].count, 10);
@@ -897,6 +906,315 @@ app.delete('/api/restock', async (_req: Request, res: Response) => {
     res.json({ success: true, message: 'All restock items cleared' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// TELEGRAM BOT INTEGRATION API
+// Bot: @Digital_Invitation_Link_bot (https://t.me/Digital_Invitation_Link_bot)
+// ==========================================
+const DEFAULT_TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '9202062895:AAE46SFy11XxMWa9tbmJL-nlmWLuxlp39Yg';
+
+// Helper to chunk long text into Telegram-compliant pieces (<4000 characters)
+const splitTelegramText = (text: string, maxLen = 3900): string[] => {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  const lines = text.split('\n');
+  let currentChunk = '';
+
+  for (const line of lines) {
+    if ((currentChunk + '\n' + line).length > maxLen) {
+      if (currentChunk) chunks.push(currentChunk.trim());
+      currentChunk = line;
+    } else {
+      currentChunk = currentChunk ? currentChunk + '\n' + line : line;
+    }
+  }
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  return chunks;
+};
+
+// Helper to strip HTML tags for plain-text fallback
+const stripHtml = (html: string): string => {
+  return html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+};
+
+// 14. GET Telegram Bot info & health check
+app.get('/api/telegram/info', async (req: Request, res: Response) => {
+  try {
+    const token = (req.query.token as string) || DEFAULT_TELEGRAM_BOT_TOKEN;
+    const tgRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const data: any = await tgRes.json();
+    if (!data.ok) {
+      return res.status(400).json({ ok: false, error: data.description || 'Invalid Telegram bot token' });
+    }
+    res.json({
+      ok: true,
+      bot: data.result,
+      botUsername: data.result?.username || 'Digital_Invitation_Link_bot',
+      botLink: `https://t.me/${data.result?.username || 'Digital_Invitation_Link_bot'}`
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 15. GET Telegram recent updates (Auto-detect user or group chat IDs)
+app.get('/api/telegram/updates', async (req: Request, res: Response) => {
+  try {
+    const token = (req.query.token as string) || DEFAULT_TELEGRAM_BOT_TOKEN;
+    const tgRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&offset=-100`);
+    const data: any = await tgRes.json();
+
+    if (!data.ok) {
+      return res.status(400).json({ ok: false, error: data.description || 'Failed to fetch Telegram updates' });
+    }
+
+    const chatsMap = new Map<string, any>();
+    const updates = Array.isArray(data.result) ? data.result : [];
+
+    for (const update of updates) {
+      const msg = update.message || update.channel_post || update.edited_message || update.my_chat_member;
+      const chat = msg?.chat;
+      if (!chat || !chat.id) continue;
+
+      const from = msg?.from;
+      const chatIdStr = String(chat.id);
+      const isGroup = chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel';
+
+      const displayName = isGroup
+        ? (chat.title || 'ក្រុម (Group)')
+        : (`${from?.first_name || chat.first_name || ''} ${from?.last_name || chat.last_name || ''}`.trim() || chat.username || `User ${chat.id}`);
+
+      const msgDate = msg?.date ? new Date(msg.date * 1000).toISOString() : new Date().toISOString();
+
+      if (!chatsMap.has(chatIdStr) || new Date(msgDate) > new Date(chatsMap.get(chatIdStr).lastActive)) {
+        chatsMap.set(chatIdStr, {
+          id: chatIdStr,
+          type: chat.type,
+          name: displayName,
+          username: chat.username || from?.username || '',
+          lastActive: msgDate,
+          lastText: msg?.text || (msg?.document ? '📎 Document' : msg?.photo ? '📷 Photo' : 'Joined/Started')
+        });
+      }
+    }
+
+    const chats = Array.from(chatsMap.values()).sort(
+      (a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime()
+    );
+
+    res.json({
+      ok: true,
+      botUsername: 'Digital_Invitation_Link_bot',
+      botLink: 'https://t.me/Digital_Invitation_Link_bot',
+      chatsCount: chats.length,
+      chats
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 16. GET / POST Telegram Saved Chat Settings
+app.get('/api/telegram/settings', async (_req: Request, res: Response) => {
+  try {
+    const row = await pool.query("SELECT value FROM app_settings WHERE key = 'telegram_chat_id' LIMIT 1;");
+    const chatId = row.rows.length > 0 ? row.rows[0].value : null;
+    res.json({
+      chatId,
+      botUsername: 'Digital_Invitation_Link_bot',
+      botLink: 'https://t.me/Digital_Invitation_Link_bot'
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/telegram/settings', async (req: Request, res: Response) => {
+  try {
+    const { chatId } = req.body || {};
+    if (chatId) {
+      await pool.query(`
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES ('telegram_chat_id', $1, CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
+      `, [String(chatId).trim()]);
+    }
+    res.json({ success: true, chatId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 17. POST Send Excel Document & Order Text to Telegram
+app.post('/api/telegram/send', async (req: Request, res: Response) => {
+  try {
+    const {
+      chatId,
+      messageText,
+      excelBase64,
+      fileName,
+      caption,
+      botToken: customToken
+    } = req.body || {};
+
+    const token = customToken || DEFAULT_TELEGRAM_BOT_TOKEN;
+
+    if (!chatId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat ID ត្រូវបានទាមទារ! សូមបញ្ចូល Telegram Chat ID ឬ Group ID។'
+      });
+    }
+
+    const cleanChatId = String(chatId).trim();
+    let documentSent = false;
+    let messageSent = false;
+    let lastTelegramError: string | null = null;
+
+    // A. Send Excel Document (.xlsx) if provided
+    if (excelBase64) {
+      try {
+        const rawBase64 = excelBase64.includes(',') ? excelBase64.split(',')[1] : excelBase64;
+        const buffer = Buffer.from(rawBase64, 'base64');
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        const formData = new FormData();
+        formData.append('chat_id', cleanChatId);
+        formData.append('document', blob, fileName || 'Takeo_Daily_Order_Plan.xlsx');
+
+        if (caption) {
+          formData.append('caption', caption.slice(0, 1024));
+          formData.append('parse_mode', 'HTML');
+        }
+
+        const docRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+          method: 'POST',
+          body: formData
+        });
+        const docData: any = await docRes.json();
+
+        if (docData.ok) {
+          documentSent = true;
+        } else {
+          lastTelegramError = docData.description || 'បរាជ័យក្នុងការផ្ញើឯកសារ Excel';
+          console.error('Telegram sendDocument error:', docData);
+
+          // Retry without HTML parse_mode if entity parsing failed
+          if (caption && docData.description?.includes("can't parse entities")) {
+            const retryFormData = new FormData();
+            retryFormData.append('chat_id', cleanChatId);
+            retryFormData.append('document', blob, fileName || 'Takeo_Daily_Order_Plan.xlsx');
+            retryFormData.append('caption', stripHtml(caption).slice(0, 1024));
+
+            const retryRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+              method: 'POST',
+              body: retryFormData
+            });
+            const retryData: any = await retryRes.json();
+            if (retryData.ok) {
+              documentSent = true;
+              lastTelegramError = null;
+            }
+          }
+        }
+      } catch (docErr: any) {
+        console.error('Exception during document send:', docErr);
+        lastTelegramError = docErr.message;
+      }
+    }
+
+    // B. Send Text Message if provided
+    if (messageText && messageText.trim()) {
+      try {
+        const chunks = splitTelegramText(messageText, 3900);
+        let allChunksSent = true;
+
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          const prefix = chunks.length > 1 ? `[${i + 1}/${chunks.length}] ` : '';
+          const textToSend = prefix + chunk;
+
+          let msgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: cleanChatId,
+              text: textToSend,
+              parse_mode: 'HTML'
+            })
+          });
+          let msgData: any = await msgRes.json();
+
+          // Fallback to plain text if HTML parsing failed
+          if (!msgData.ok && msgData.description?.includes("can't parse entities")) {
+            msgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: cleanChatId,
+                text: prefix + stripHtml(chunk)
+              })
+            });
+            msgData = await msgRes.json();
+          }
+
+          if (!msgData.ok) {
+            allChunksSent = false;
+            lastTelegramError = msgData.description || 'បរាជ័យក្នុងការផ្ញើសារអត្ថបទ';
+            console.error('Telegram sendMessage error:', msgData);
+            break;
+          }
+        }
+
+        if (allChunksSent) {
+          messageSent = true;
+        }
+      } catch (msgErr: any) {
+        console.error('Exception during text send:', msgErr);
+        lastTelegramError = msgErr.message;
+      }
+    }
+
+    // If both failed and we have an error
+    if (!documentSent && !messageSent && lastTelegramError) {
+      let friendlyError = lastTelegramError;
+      if (lastTelegramError.includes('chat not found')) {
+        friendlyError = 'រកមិនឃើញ Chat ID នេះទេ! សូមប្រាកដថាអ្នកបានចុច Start លើ Bot @Digital_Invitation_Link_bot ឬ Add Bot ចូលក្នុង Telegram Group រួចហើយ។';
+      } else if (lastTelegramError.includes('bot was blocked')) {
+        friendlyError = 'Bot ត្រូវបាន Block! សូម Unblock Bot @Digital_Invitation_Link_bot ក្នុង Telegram។';
+      } else if (lastTelegramError.includes('not enough rights')) {
+        friendlyError = 'Bot មិនទាន់មានសិទ្ធិផ្ញើសារ/ឯកសារក្នុង Group នេះទេ! សូមផ្ដល់សិទ្ធិ Send Messages/Media ដល់ Bot។';
+      }
+      return res.status(400).json({ success: false, error: friendlyError, rawError: lastTelegramError });
+    }
+
+    // Auto-save this active Chat ID to DB for next time
+    try {
+      await pool.query(`
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES ('telegram_chat_id', $1, CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
+      `, [cleanChatId]);
+    } catch (saveErr) {
+      console.warn('Could not auto-save telegram_chat_id:', saveErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'បានបាញ់ទៅ Telegram រួចរាល់ដោយជោគជ័យ!',
+      documentSent,
+      messageSent,
+      chatId: cleanChatId
+    });
+  } catch (err: any) {
+    console.error('Error in /api/telegram/send:', err);
+    res.status(500).json({ success: false, error: err.message || 'Internal server error sending to Telegram' });
   }
 });
 

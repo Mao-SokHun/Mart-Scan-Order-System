@@ -87,6 +87,15 @@ class SoundEffects {
       console.warn('Audio feedback failed:', e);
     }
   }
+
+  // Convenient aliases
+  playSuccess() {
+    this.playSuccessBeep();
+  }
+
+  playError() {
+    this.playErrorBuzz();
+  }
 }
 
 export const sound = new SoundEffects();

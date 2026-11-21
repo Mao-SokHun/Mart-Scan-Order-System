@@ -359,21 +359,26 @@ const parseVendorAndRemark = (supplierName: string): { vendor: string; remark: s
 };
 
 /**
- * Main Export: Store Daily Plan Format with prominent "ចំនួនត្រូវទិញ (Order Qty)" column
- * and Department Sheets ('Daily', 'Bakery and Cake', 'Fresh', ' Milk and Yogurt')
+ * Internal Builder: Generates the full Takeo Daily Plan Workbook
  */
-export const exportDailyPlanExcel = (
+export const buildDailyPlanWorkbook = (
   items: RestockItem[], 
   orderDay: OrderDay = getCurrentDayOfWeek(),
   supplierFilter?: string
-): boolean => {
-  if (items.length === 0) return false;
+): {
+  workbook: XLSX.WorkBook;
+  filename: string;
+  totalItems: number;
+  totalQty: number;
+  filteredItems: RestockItem[];
+} | null => {
+  if (items.length === 0) return null;
 
   const filteredItems = supplierFilter && supplierFilter !== 'all'
     ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
     : items;
 
-  if (filteredItems.length === 0) return false;
+  if (filteredItems.length === 0) return null;
 
   // Exact Daily Plan Columns matching Takeo Store format: 14 columns
   const headers = [
@@ -555,12 +560,159 @@ export const exportDailyPlanExcel = (
 
   const dateStr = new Date().toISOString().split('T')[0];
   const filename = `Daily_Order_Plan_${orderDay}_${dateStr}.xlsx`;
-  XLSX.writeFile(workbook, filename);
+
+  return {
+    workbook,
+    filename,
+    totalItems: filteredItems.length,
+    totalQty,
+    filteredItems
+  };
+};
+
+/**
+ * Main Export: Save Store Daily Plan Excel file to browser download
+ */
+export const exportDailyPlanExcel = (
+  items: RestockItem[], 
+  orderDay: OrderDay = getCurrentDayOfWeek(),
+  supplierFilter?: string
+): boolean => {
+  const plan = buildDailyPlanWorkbook(items, orderDay, supplierFilter);
+  if (!plan) return false;
+  XLSX.writeFile(plan.workbook, plan.filename);
   return true;
+};
+
+/**
+ * Generate Excel base64 data for sending directly via Telegram Bot
+ */
+export const exportDailyPlanExcelBase64 = (
+  items: RestockItem[], 
+  orderDay: OrderDay = getCurrentDayOfWeek(),
+  supplierFilter?: string
+): {
+  base64: string;
+  filename: string;
+  totalItems: number;
+  totalQty: number;
+} | null => {
+  const plan = buildDailyPlanWorkbook(items, orderDay, supplierFilter);
+  if (!plan) return null;
+
+  const base64 = XLSX.write(plan.workbook, { bookType: 'xlsx', type: 'base64' });
+  return {
+    base64,
+    filename: plan.filename,
+    totalItems: plan.totalItems,
+    totalQty: plan.totalQty
+  };
 };
 
 // Alias for backwards compatibility
 export const exportToTakeoPlanExcel = exportDailyPlanExcel;
+
+/**
+ * Generate both Telegram HTML message and plain text summary
+ */
+export const generateTelegramOrderContent = (
+  items: RestockItem[],
+  orderDay: OrderDay = getCurrentDayOfWeek(),
+  supplierFilter?: string
+): {
+  html: string;
+  plainText: string;
+  totalItems: number;
+  totalQty: number;
+} => {
+  const filteredItems = supplierFilter && supplierFilter !== 'all'
+    ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
+    : items;
+
+  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
+  let dateStr = '';
+  try {
+    dateStr = new Date().toLocaleDateString('km-KH');
+  } catch {
+    dateStr = new Date().toLocaleDateString();
+  }
+
+  const escapeHtml = (str?: string) =>
+    (str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .trim();
+
+  const cleanMd = (str?: string) => (str || '').replace(/[*_`]/g, ' ').trim();
+
+  // 1. Build HTML version (for Telegram Bot sendMessage)
+  let html = `📦 <b>តារាងបញ្ជាទិញទំនិញ (Daily Order Plan)</b>\n`;
+  html += `📅 កាលបរិច្ឆេទ: <b>${escapeHtml(dateStr)}</b> (ថ្ងៃ <b>${orderDay}</b>)\n`;
+  if (supplierFilter && supplierFilter !== 'all') {
+    html += `🏢 អ្នកផ្គត់ផ្គង់: <b>${escapeHtml(supplierFilter)}</b>\n`;
+  }
+  html += `━━━━━━━━━━━━━━━━━━━━\n`;
+
+  // 2. Build Plain Text version (for clipboard / fallback)
+  let text = `📦 *តារាងបញ្ជាទិញទំនិញ (Daily Order Plan)*\n`;
+  text += `📅 កាលបរិច្ឆេទ: ${dateStr} (ថ្ងៃ ${orderDay})\n`;
+  if (supplierFilter && supplierFilter !== 'all') {
+    text += `🏢 អ្នកផ្គត់ផ្គង់: *${cleanMd(supplierFilter)}*\n`;
+  }
+  text += `------------------------------------\n`;
+
+  filteredItems.forEach((item, idx) => {
+    const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
+    const finalRemark = item.product.remark || remark;
+
+    const hName = escapeHtml(item.product.name);
+    const hKhmer = escapeHtml(item.product.khmerName);
+    const hCode = escapeHtml(item.product.barcode);
+    const hVendor = escapeHtml(vendor);
+    const hUnit = escapeHtml(item.product.unit || 'Units');
+    const hRemark = escapeHtml(finalRemark);
+
+    const mName = cleanMd(item.product.name);
+    const mKhmer = cleanMd(item.product.khmerName);
+    const mCode = cleanMd(item.product.barcode);
+    const mVendor = cleanMd(vendor);
+    const mUnit = cleanMd(item.product.unit || 'Units');
+    const mRemark = cleanMd(finalRemark);
+
+    // HTML Item block
+    html += `<b>${idx + 1}. ${hName}</b>\n`;
+    if (hKhmer) html += `   <i>(${hKhmer})</i>\n`;
+    html += `   🏷 Code: <code>${hCode}</code> | Vendor: <b>${hVendor}</b>\n`;
+    html += `   🔢 ចំនួនត្រូវទិញ: <b>${item.orderQuantity}</b> ${hUnit}\n`;
+    if (hRemark) html += `   🚚 <i>${hRemark}</i>\n`;
+    html += `\n`;
+
+    // Markdown Item block
+    text += `${idx + 1}. *${mName}*\n`;
+    if (mKhmer) text += `   (${mKhmer})\n`;
+    text += `   🏷 Code: \`${mCode}\` | Vendor: ${mVendor}\n`;
+    text += `   🔢 ចំនួនត្រូវទិញ [${orderDay}]: *${item.orderQuantity}* ${mUnit}\n`;
+    if (mRemark) text += `   🚚 ${mRemark}\n`;
+  });
+
+  html += `━━━━━━━━━━━━━━━━━━━━\n`;
+  html += `📊 សរុបមុខទំនិញ: <b>${filteredItems.length}</b> មុខ\n`;
+  html += `📦 សរុបចំនួនទិញ: <b>${totalQty}</b> ឯកតា\n\n`;
+  html += `<i>✨ បាញ់ចេញពីប្រព័ន្ធ Mart Scan & Order</i>`;
+
+  text += `------------------------------------\n`;
+  text += `📊 សរុបមុខទំនិញ: ${filteredItems.length} មុខ\n`;
+  text += `📦 សរុបចំនួនទិញ: ${totalQty} ឯកតា\n\n`;
+  text += `_បង្កើតដោយប្រព័ន្ធ Mart Scan & Order_`;
+
+  return {
+    html,
+    plainText: text,
+    totalItems: filteredItems.length,
+    totalQty
+  };
+};
 
 /**
  * Simple Clean PO Export (Single Sheet)
@@ -639,49 +791,10 @@ export const copyToTelegramClipboard = async (
 ): Promise<boolean> => {
   if (items.length === 0) return false;
 
-  const filteredItems = supplierFilter && supplierFilter !== 'all'
-    ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
-    : items;
+  const content = generateTelegramOrderContent(items, orderDay, supplierFilter);
+  if (content.totalItems === 0) return false;
 
-  if (filteredItems.length === 0) return false;
-
-  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
-  let dateStr = '';
-  try {
-    dateStr = new Date().toLocaleDateString('km-KH');
-  } catch {
-    dateStr = new Date().toLocaleDateString();
-  }
-
-  const cleanTg = (str?: string) => (str || '').replace(/[*_`]/g, ' ').trim();
-
-  let text = `📦 *តារាងបញ្ជាទិញទំនិញ (Daily Order Plan)*\n`;
-  text += `📅 កាលបរិច្ឆេទ: ${dateStr} (ថ្ងៃ ${orderDay})\n`;
-  if (supplierFilter && supplierFilter !== 'all') {
-    text += `🏢 អ្នកផ្គត់ផ្គង់: *${cleanTg(supplierFilter)}*\n`;
-  }
-  text += `------------------------------------\n`;
-
-  filteredItems.forEach((item, idx) => {
-    const { vendor, remark } = parseVendorAndRemark(item.product.supplierName);
-    const finalRemark = item.product.remark || remark;
-    const safeName = cleanTg(item.product.name);
-    const safeKhmer = cleanTg(item.product.khmerName);
-    const safeVendor = cleanTg(vendor);
-    const safeUnit = cleanTg(item.product.unit || 'Units');
-    const safeRemark = cleanTg(finalRemark);
-
-    text += `${idx + 1}. *${safeName}*\n`;
-    if (safeKhmer) text += `   (${safeKhmer})\n`;
-    text += `   🏷 Code: \`${item.product.barcode}\` | Vendor: ${safeVendor}\n`;
-    text += `   🔢 ចំនួនត្រូវទិញ [${orderDay}]: *${item.orderQuantity}* ${safeUnit}\n`;
-    if (safeRemark) text += `   🚚 ${safeRemark}\n`;
-  });
-
-  text += `------------------------------------\n`;
-  text += `📊 សរុបមុខទំនិញ: ${filteredItems.length} មុខ\n`;
-  text += `📦 សរុបចំនួនទិញ: ${totalQty} ឯកតា\n`;
-  text += `\n_បង្កើតដោយប្រព័ន្ធ Mart Scan & Order_`;
+  const text = content.plainText;
 
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
