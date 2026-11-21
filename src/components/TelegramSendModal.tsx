@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Send, FileSpreadsheet, MessageSquare, Bot, 
   ExternalLink, RefreshCw, CheckCircle2, AlertCircle, 
-  Copy, Check, Users, User, ChevronDown, ChevronUp, Sparkles
+  Copy, Check, User, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { RestockItem } from '../types';
 import { OrderDay, exportDailyPlanExcelBase64, generateTelegramOrderContent } from '../utils/export';
@@ -26,6 +26,7 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
   supplierFilter,
   onShowToast
 }) => {
+  const [usernameInput, setUsernameInput] = useState<string>('');
   const [chatId, setChatId] = useState<string>('');
   const [sendExcel, setSendExcel] = useState<boolean>(true);
   const [sendText, setSendText] = useState<boolean>(true);
@@ -55,18 +56,23 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
 
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
 
-  // Load saved Chat ID on modal open
+  // Load saved Username on modal open
   useEffect(() => {
     if (isOpen) {
       setSendSuccess(false);
       setErrorMessage(null);
 
-      // Check localStorage first
-      const savedLocal = localStorage.getItem('mart_scan_telegram_chat_id');
-      if (savedLocal) {
-        setChatId(savedLocal);
+      const savedUser = localStorage.getItem('mart_telegram_username');
+      const savedId = localStorage.getItem('mart_scan_telegram_chat_id');
+
+      if (savedUser) {
+        setUsernameInput(savedUser);
+      } else if (savedId) {
+        setUsernameInput(savedId);
+      }
+      if (savedId) {
+        setChatId(savedId);
       } else {
-        // Fallback to server DB setting
         api.getTelegramSettings()
           .then(settings => {
             if (settings.chatId) {
@@ -88,7 +94,7 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Auto-detect chat IDs from Telegram Bot updates
+  // Auto-detect Telegram Users who started the bot
   const handleAutoDetect = async () => {
     setIsDetecting(true);
     setErrorMessage(null);
@@ -97,19 +103,23 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
       if (res.chats && res.chats.length > 0) {
         setDetectedChats(res.chats);
         setShowDetectedList(true);
-        // Automatically select the most recent one if no chatId currently set
-        if (!chatId) {
+
+        // If no username currently selected, pick the first user
+        if (!usernameInput) {
           const first = res.chats[0];
+          const display = first.username ? `@${first.username}` : first.name;
+          setUsernameInput(display);
           setChatId(first.id);
+          localStorage.setItem('mart_telegram_username', display);
           localStorage.setItem('mart_scan_telegram_chat_id', first.id);
           api.saveTelegramSettings(first.id).catch(() => {});
         }
-        onShowToast(`រកឃើញ Chat/Group ចំនួន ${res.chats.length} ដែលបានទាក់ទងមក Bot!`, 'success');
+        onShowToast(`រកឃើញ User ចំនួន ${res.chats.length} ដែលបានទាក់ទងមក Bot!`, 'success');
       } else {
         setDetectedChats([]);
         setShowDetectedList(false);
         setErrorMessage(
-          `⚠️ មិនទាន់ឃើញមានសារផ្ញើទៅ Bot នៅឡើយទេ!\n👉 សូមចុចបើក Bot (${BOT_USERNAME}) រួចចុច "START" (ឬ Add Bot ចូល Group) បន្ទាប់មកចុច "រក Chat ID ស្វ័យប្រវត្តិ" ម្តងទៀត។`
+          `⚠️ មិនទាន់ឃើញមាន User ផ្ញើសារ ឬចុច Start លើ Bot នៅឡើយទេ!\n👉 សូមចុចបើក Bot (@${BOT_USERNAME}) រួចចុច "START" បន្ទាប់មកចុចប៊ូតុង "រក Username ស្វ័យប្រវត្តិ" ម្តងទៀត។`
         );
       }
     } catch (err: any) {
@@ -119,10 +129,13 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
     }
   };
 
-  const handleSelectChat = (selectedId: string) => {
-    setChatId(selectedId);
-    localStorage.setItem('mart_scan_telegram_chat_id', selectedId);
-    api.saveTelegramSettings(selectedId).catch(() => {});
+  const handleSelectUser = (c: { id: string; name: string; username: string }) => {
+    const displayVal = c.username ? `@${c.username}` : c.name;
+    setUsernameInput(displayVal);
+    setChatId(c.id);
+    localStorage.setItem('mart_telegram_username', displayVal);
+    localStorage.setItem('mart_scan_telegram_chat_id', c.id);
+    api.saveTelegramSettings(c.id).catch(() => {});
     setShowDetectedList(false);
   };
 
@@ -151,8 +164,9 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
 
   // Main action: Send to Telegram
   const handleSendToTelegram = async () => {
-    if (!chatId.trim()) {
-      setErrorMessage('សូមបញ្ចូល ឬជ្រើសរើស Telegram Chat ID ជាមុនសិន!');
+    const target = chatId || usernameInput.trim();
+    if (!target) {
+      setErrorMessage('សូមបញ្ចូល ឬជ្រើសរើស Telegram Username របស់ User ជាមុនសិន!');
       return;
     }
 
@@ -189,7 +203,7 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
 
       // 3. Send via backend API
       const result = await api.sendToTelegram({
-        chatId: chatId.trim(),
+        chatId: target,
         excelBase64,
         fileName,
         caption,
@@ -199,8 +213,12 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
       if (result.success) {
         setSendSuccess(true);
         sound.playSuccess();
-        localStorage.setItem('mart_scan_telegram_chat_id', chatId.trim());
-        api.saveTelegramSettings(chatId.trim()).catch(() => {});
+        if (result.chatId) {
+          setChatId(result.chatId);
+          localStorage.setItem('mart_scan_telegram_chat_id', result.chatId);
+          api.saveTelegramSettings(result.chatId).catch(() => {});
+        }
+        localStorage.setItem('mart_telegram_username', usernameInput.trim());
         onShowToast('🚀 បានបាញ់ឯកសារ Excel និងបញ្ជីទំនិញចូល Telegram រួចរាល់ដោយជោគជ័យ!', 'success');
       } else {
         throw new Error(result.error || 'បរាជ័យក្នុងការផ្ញើទៅ Telegram');
@@ -239,7 +257,7 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-sky-100 font-medium">
-                ផ្ញើឯកសារ Excel (Takeo Plan) និងបញ្ជីទំនិញកុម្ម៉ង់ដោយស្វ័យប្រវត្តិ
+                ផ្ញើឯកសារ Excel (Takeo Plan) និងបញ្ជីទំនិញកុម្ម៉ង់ចូល Telegram របស់ User
               </p>
             </div>
           </div>
@@ -278,15 +296,16 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
               </a>
             </div>
             <div className="text-[11px] text-slate-600 leading-relaxed bg-white/70 p-2.5 rounded-xl border border-sky-100/60">
-              💡 <b>របៀបប្រើ៖</b> សូមចុច <b>"បើក Bot ក្នុង Telegram"</b> រួចចុច <b>START</b> (ឬទាញ Bot នេះចូលក្នុង Telegram Group របស់អ្នក)។ បន្ទាប់មកចុចប៊ូតុង <b>"រក Chat ID ស្វ័យប្រវត្តិ"</b> ខាងក្រោម!
+              💡 <b>របៀបប្រើ៖</b> សូមចុច <b>"បើក Bot ក្នុង Telegram"</b> រួចចុច <b>START</b> លើ Bot។ បន្ទាប់មកចុចប៊ូតុង <b>"រក Username ស្វ័យប្រវត្តិ"</b> ខាងក្រោម ដើម្បីជ្រើសរើស Username របស់អ្នកភ្លាមៗ!
             </div>
           </div>
 
-          {/* Chat ID Input with Auto Detect */}
+          {/* Username Input with Auto Detect */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <span>Telegram Chat ID / Group ID</span>
+                <User className="w-3.5 h-3.5 text-sky-600" />
+                <span>Telegram Username របស់ User</span>
                 <span className="text-rose-500">*</span>
               </label>
               <button
@@ -296,26 +315,42 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
                 className="text-xs text-sky-600 hover:text-sky-700 font-bold flex items-center gap-1 py-0.5 px-2 rounded-lg hover:bg-sky-50 transition active:scale-95 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3 h-3 ${isDetecting ? 'animate-spin' : ''}`} />
-                <span>{isDetecting ? 'កំពុងស្វែងរក...' : '🔍 រក Chat ID ស្វ័យប្រវត្តិ'}</span>
+                <span>{isDetecting ? 'កំពុងស្វែងរក...' : '🔍 រក Username ស្វ័យប្រវត្តិ'}</span>
               </button>
             </div>
 
             <div className="relative">
               <input
                 type="text"
-                value={chatId}
+                value={usernameInput}
                 onChange={e => {
-                  setChatId(e.target.value);
-                  localStorage.setItem('mart_scan_telegram_chat_id', e.target.value.trim());
+                  const val = e.target.value;
+                  setUsernameInput(val);
+                  localStorage.setItem('mart_telegram_username', val.trim());
+                  
+                  // If matches a detected user
+                  const clean = val.replace(/^@/, '').toLowerCase().trim();
+                  const match = detectedChats.find(c => (c.username || '').toLowerCase() === clean);
+                  if (match) {
+                    setChatId(match.id);
+                    localStorage.setItem('mart_scan_telegram_chat_id', match.id);
+                  } else if (/^-?\d+$/.test(val.trim())) {
+                    setChatId(val.trim());
+                    localStorage.setItem('mart_scan_telegram_chat_id', val.trim());
+                  } else {
+                    setChatId(val.trim());
+                  }
                 }}
-                placeholder="ឧ. 123456789 (សម្រាប់មនុស្ស) ឬ -1001234567890 (សម្រាប់ Group)"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 text-xs sm:text-sm font-mono text-slate-800 placeholder:text-slate-400 outline-none transition"
+                placeholder="ឧ. @username របស់ User (ឧ. @Mao_SokHun)"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 text-xs sm:text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:font-normal outline-none transition font-sans"
               />
-              {chatId && (
+              {usernameInput && (
                 <button
                   type="button"
                   onClick={() => {
+                    setUsernameInput('');
                     setChatId('');
+                    localStorage.removeItem('mart_telegram_username');
                     localStorage.removeItem('mart_scan_telegram_chat_id');
                   }}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
@@ -325,11 +360,11 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
               )}
             </div>
 
-            {/* Detected Chats Dropdown List */}
+            {/* Detected Users Dropdown List */}
             {showDetectedList && detectedChats.length > 0 && (
               <div className="p-2 bg-slate-50 border border-slate-200 rounded-2xl space-y-1 animate-fade-in shadow-sm">
                 <div className="px-2 py-1 text-[11px] font-bold text-slate-500 flex items-center justify-between">
-                  <span>ជ្រើសរើស Chat ដែលបានរកឃើញ៖</span>
+                  <span>ជ្រើសរើស Username របស់អ្នកដែលបានរកឃើញ៖</span>
                   <button 
                     onClick={() => setShowDetectedList(false)}
                     className="text-slate-400 hover:text-slate-600 text-[10px]"
@@ -337,32 +372,43 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
                     បិទ
                   </button>
                 </div>
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {detectedChats.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => handleSelectChat(c.id)}
-                      className={`w-full text-left p-2 rounded-xl transition flex items-center justify-between text-xs ${
-                        chatId === c.id 
-                          ? 'bg-sky-100/70 border border-sky-300 text-sky-950 font-bold' 
-                          : 'bg-white hover:bg-sky-50/70 border border-slate-100 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                          c.type === 'group' || c.type === 'supergroup' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          {c.type === 'group' || c.type === 'supergroup' ? <Users className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                <div className="max-h-48 overflow-y-auto space-y-1.5 p-1">
+                  {detectedChats.map(c => {
+                    const displayUser = c.username ? `@${c.username}` : c.name;
+                    const isSelected = usernameInput === displayUser || chatId === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => handleSelectUser(c)}
+                        className={`w-full text-left p-2.5 rounded-2xl transition flex items-center justify-between text-xs ${
+                          isSelected 
+                            ? 'bg-sky-100/80 border border-sky-300 text-sky-950 font-bold shadow-xs' 
+                            : 'bg-white hover:bg-sky-50/70 border border-slate-100 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 overflow-hidden">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div className="truncate">
+                            <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
+                              <span>{c.name}</span>
+                              {c.username && (
+                                <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 font-mono font-semibold border border-sky-200/60">
+                                  @{c.username}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                              {c.lastText ? `សារចុងក្រោយ: ${c.lastText}` : 'បានចុច Start លើ Bot'}
+                            </div>
+                          </div>
                         </div>
-                        <div className="truncate">
-                          <div className="font-semibold text-slate-800 truncate">{c.name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">ID: {c.id} {c.username ? `(@${c.username})` : ''}</div>
-                        </div>
-                      </div>
-                      {chatId === c.id && <Check className="w-4 h-4 text-sky-600 shrink-0" />}
-                    </button>
-                  ))}
+                        {isSelected && <Check className="w-4 h-4 text-sky-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

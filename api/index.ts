@@ -1066,11 +1066,51 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
     if (!chatId) {
       return res.status(400).json({
         success: false,
-        error: 'Chat ID ត្រូវបានទាមទារ! សូមបញ្ចូល Telegram Chat ID ឬ Group ID។'
+        error: 'Telegram Username ឬ Chat ID ត្រូវបានទាមទារ! សូមបញ្ចូល @username ឬជ្រើសរើសពីបញ្ជី។'
       });
     }
 
-    const cleanChatId = String(chatId).trim();
+    let cleanChatId = String(chatId).trim();
+
+    // If cleanChatId is not numeric (e.g. @username or text name), auto-resolve from recent bot updates
+    const isNumeric = /^-?\d+$/.test(cleanChatId);
+    if (!isNumeric) {
+      const searchTarget = cleanChatId.replace(/^@/, '').toLowerCase().trim();
+      let foundId: string | null = null;
+
+      try {
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&offset=-100`);
+        const data: any = await tgRes.json();
+        if (data.ok && Array.isArray(data.result)) {
+          for (const update of data.result) {
+            const msg = update.message || update.channel_post || update.edited_message || update.my_chat_member;
+            const chat = msg?.chat;
+            const from = msg?.from;
+            if (!chat || !chat.id) continue;
+
+            const uName = (chat.username || from?.username || '').toLowerCase().trim();
+            const fName = `${from?.first_name || chat.first_name || ''} ${from?.last_name || chat.last_name || ''}`.toLowerCase().trim();
+
+            if (uName === searchTarget || fName === searchTarget || (searchTarget.length > 2 && fName.includes(searchTarget))) {
+              foundId = String(chat.id);
+              break;
+            }
+          }
+        }
+      } catch (lookupErr) {
+        console.warn('Telegram username resolution failed:', lookupErr);
+      }
+
+      if (foundId) {
+        cleanChatId = foundId;
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: `រកមិនឃើញគណនី Telegram «${chatId}» ក្នុង Bot នៅឡើយទេ!\n👉 សូមប្រាកដថា User បានចុច "START" លើ Bot @Digital_Invitation_Link_bot រួចហើយ។`
+        });
+      }
+    }
+
     let documentSent = false;
     let messageSent = false;
     let lastTelegramError: string | null = null;
