@@ -245,7 +245,21 @@ export const App: React.FC = () => {
         if (dbStatus.connected) {
           api.scanBarcode(cleanBarcode).then(res => {
             if (res.found && res.item) {
-              setRestockItems(prev => prev.map(i => i.id === existingId ? { ...res.item!, id: res.item!.id } : i));
+              setRestockItems(prev => prev.map(i => {
+                if (i.id === existingId || i.product.id === foundProduct.id) {
+                  // Protect user's active typed quantity against race condition overwrite
+                  const activeQty = i.orderQuantity;
+                  return {
+                    ...res.item!,
+                    id: res.item!.id,
+                    orderQuantity: activeQty > 0 ? activeQty : res.item!.orderQuantity,
+                    totalCost: activeQty > 0 
+                      ? Math.round(activeQty * (res.item!.unitCost || 0) * 100) / 100 
+                      : res.item!.totalCost
+                  };
+                }
+                return i;
+              }));
             }
           }).catch(err => {
             console.warn('Background sync scan failed:', err);
@@ -305,7 +319,7 @@ export const App: React.FC = () => {
   // Global listener for USB/Bluetooth Barcode Scanner Guns
   useBarcodeGun({
     onScan: handleScan,
-    enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen && !isImportExcelOpen
+    enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen && !isImportExcelOpen && !isTelegramModalOpen
   });
 
   // Quantity updater with 350ms debouncing per item to eliminate network race conditions
@@ -501,7 +515,7 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100/60 pb-24 sm:pb-16">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs print:hidden">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
           {/* Logo & Mart Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -562,7 +576,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 print:hidden">
         {/* Toggleable Barcode Test Sheet */}
         <div className="mb-4 flex items-center justify-between">
           <button

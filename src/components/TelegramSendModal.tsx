@@ -217,7 +217,10 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
   const contentPreview = generateTelegramOrderContent(items, orderDay, supplierFilter);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto"
+      onClick={() => { if (!isSending) onClose(); }}
+    >
       <div 
         className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-sky-100 flex flex-col max-h-[92vh] overflow-hidden my-auto"
         onClick={e => e.stopPropagation()}

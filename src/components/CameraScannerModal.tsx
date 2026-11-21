@@ -159,11 +159,9 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         disableFlip: false
       };
 
-      // Camera selector: if cameraIdToUse is provided, use exact deviceId;
+      // Camera selector: if cameraIdToUse is provided, pass string directly;
       // otherwise, try environment (back) camera first.
-      const initialCameraConfig = cameraIdToUse
-        ? { deviceId: cameraIdToUse }
-        : { facingMode: 'environment' };
+      const initialCameraConfig = cameraIdToUse || { facingMode: 'environment' };
 
       try {
         await html5QrCode.start(
@@ -187,7 +185,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             const devices = await Html5Qrcode.getCameras();
             if (devices && devices.length > 0) {
               await html5QrCode.start(
-                { deviceId: devices[0].id },
+                devices[0].id,
                 config,
                 (decodedText) => handleBarcodeDecoded(decodedText),
                 () => {}

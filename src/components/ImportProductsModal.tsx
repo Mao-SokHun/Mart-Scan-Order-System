@@ -112,11 +112,13 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
       );
 
       const extracted: ParsedProductRow[] = [];
-      const seenBarcodesInFile = new Set<string>();
 
       for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) continue;
+
+        // Track duplicate barcodes within the current sheet
+        const seenBarcodesInSheet = new Set<string>();
 
         // Parse rows as raw objects
         const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' });
@@ -149,12 +151,12 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             continue;
           }
 
-          // Avoid duplicate barcodes within the same uploaded file
+          // Avoid duplicate barcodes within the same sheet
           const cleanBarcodeKey = barcode.toLowerCase();
-          if (seenBarcodesInFile.has(cleanBarcodeKey)) {
+          if (seenBarcodesInSheet.has(cleanBarcodeKey)) {
             continue;
           }
-          seenBarcodesInFile.add(cleanBarcodeKey);
+          seenBarcodesInSheet.add(cleanBarcodeKey);
 
           // 3. Detect Khmer Name
           const rawKhmer = 
@@ -366,8 +368,15 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     XLSX.writeFile(wb, 'Mart_Products_Import_Template.xlsx');
   };
 
-  // Only rows from selected sheets will be imported
-  const rowsToImport = parsedRows.filter(r => selectedSheets.includes(r.sheetName));
+  // Only rows from selected sheets will be imported, deduplicated across the selected sheets
+  const selectedRawRows = parsedRows.filter(r => selectedSheets.includes(r.sheetName));
+  const seenBarcodesForImport = new Set<string>();
+  const rowsToImport = selectedRawRows.filter(r => {
+    const k = r.barcode.toLowerCase();
+    if (seenBarcodesForImport.has(k)) return false;
+    seenBarcodesForImport.add(k);
+    return true;
+  });
 
   // Filter parsed rows for preview
   const displayRows = rowsToImport.filter(r => {
@@ -504,8 +513,14 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-xs animate-fade-in">
-      <div className="relative w-full max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[92vh]">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-xs animate-fade-in"
+      onClick={() => { if (!isSubmitting) onClose(); }}
+    >
+      <div 
+        className="relative w-full max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[92vh]"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-slate-900 text-white shrink-0">
           <div className="flex items-center gap-2.5">
