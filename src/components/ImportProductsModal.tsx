@@ -4,7 +4,7 @@ import { Product } from '../types';
 import { saveProducts } from '../utils/storage';
 import { 
   X, UploadCloud, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, ArrowRight, Download, RefreshCw, Package 
+  AlertCircle, ArrowRight, Download, RefreshCw, Package, Check, Layers 
 } from 'lucide-react';
 
 interface ImportProductsModalProps {
@@ -42,7 +42,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
   const [isParsing, setIsParsing] = useState(false);
   const [parsedRows, setParsedRows] = useState<ParsedProductRow[]>([]);
   const [sheetsFound, setSheetsFound] = useState<string[]>([]);
-  const [selectedSheet, setSelectedSheet] = useState<string>('all');
+  const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
+  const [previewFilterSheet, setPreviewFilterSheet] = useState<string>('all');
   const [searchPreview, setSearchPreview] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -55,7 +56,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
       setFile(null);
       setParsedRows([]);
       setSheetsFound([]);
-      setSelectedSheet('all');
+      setSelectedSheets([]);
+      setPreviewFilterSheet('all');
       setSearchPreview('');
       setIsSubmitting(false);
       setErrorMsg(null);
@@ -64,6 +66,25 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  // Toggle individual sheet selection for import
+  const toggleSheet = (sheetName: string) => {
+    setSelectedSheets(prev => {
+      if (prev.includes(sheetName)) {
+        return prev.filter(s => s !== sheetName);
+      } else {
+        return [...prev, sheetName];
+      }
+    });
+  };
+
+  const selectAllSheets = () => {
+    setSelectedSheets(sheetsFound.map(s => s.trim()));
+  };
+
+  const deselectAllSheets = () => {
+    setSelectedSheets([]);
+  };
 
   // Helper to extract numeric values safely
   const parseNum = (val: any, fallback = 0): number => {
@@ -82,7 +103,9 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     try {
       const buffer = await selectedFile.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
-      setSheetsFound(workbook.SheetNames);
+      const cleanSheetNames = workbook.SheetNames.map(s => s.trim());
+      setSheetsFound(cleanSheetNames);
+      setSelectedSheets(cleanSheetNames);
 
       const existingBarcodeMap = new Set(
         existingProducts.map(p => (p.barcode || '').toLowerCase().trim())
@@ -343,9 +366,12 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     XLSX.writeFile(wb, 'Mart_Products_Import_Template.xlsx');
   };
 
+  // Only rows from selected sheets will be imported
+  const rowsToImport = parsedRows.filter(r => selectedSheets.includes(r.sheetName));
+
   // Filter parsed rows for preview
-  const displayRows = parsedRows.filter(r => {
-    const matchesSheet = selectedSheet === 'all' || r.sheetName === selectedSheet;
+  const displayRows = rowsToImport.filter(r => {
+    const matchesSheet = previewFilterSheet === 'all' || r.sheetName === previewFilterSheet;
     const q = searchPreview.toLowerCase().trim();
     if (!q) return matchesSheet;
     const matchesSearch = 
@@ -356,8 +382,8 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     return matchesSheet && matchesSearch;
   });
 
-  const newCount = parsedRows.filter(r => !r.isExisting).length;
-  const updateCount = parsedRows.filter(r => r.isExisting).length;
+  const newCount = rowsToImport.filter(r => !r.isExisting).length;
+  const updateCount = rowsToImport.filter(r => r.isExisting).length;
 
   // Construct Product objects for offline resilience or fallback
   const buildMergedList = (): { merged: Product[]; count: number } => {
@@ -368,7 +394,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     });
 
     let count = 0;
-    for (const row of parsedRows) {
+    for (const row of rowsToImport) {
       const key = row.barcode.toLowerCase().trim();
       const existingIdx = barcodeMap.get(key);
       if (existingIdx !== undefined) {
@@ -413,14 +439,14 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     return { merged: localMerged, count };
   };
 
-  // Submit all parsed products to backend API
+  // Submit selected parsed products to backend API
   const handleImportSubmit = async () => {
-    if (parsedRows.length === 0) return;
+    if (rowsToImport.length === 0) return;
     setIsSubmitting(true);
     setErrorMsg(null);
 
     try {
-      const payload: Partial<Product>[] = parsedRows.map(r => ({
+      const payload: Partial<Product>[] = rowsToImport.map(r => ({
         barcode: r.barcode,
         name: r.name,
         khmerName: r.khmerName,
@@ -448,7 +474,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
       }
 
       const data = await res.json();
-      setSuccessCount(data.count || parsedRows.length);
+      setSuccessCount(data.count || rowsToImport.length);
 
       // Re-fetch all products to update local state
       const prodsRes = await fetch('/api/products');
@@ -591,12 +617,86 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
           {/* Parsed Preview Section */}
           {parsedRows.length > 0 && successCount === null && (
             <div className="space-y-3">
+              {/* Multi-Sheet Selection Section (when file has multiple sheets like Daily, Bakery, Fresh, Milk) */}
+              {sheetsFound.length > 1 && (
+                <div className="p-3.5 bg-blue-50/60 border border-blue-200 rounded-2xl space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-blue-600" />
+                        <span>ជ្រើសរើស Sheet សម្រាប់នាំចូល (Select Sheets to Import):</span>
+                      </span>
+                      <span className="text-[11px] font-bold text-blue-700 bg-blue-100/90 px-2.5 py-0.5 rounded-full border border-blue-200">
+                        បានជ្រើសរើស {selectedSheets.length} / {sheetsFound.length} Sheet
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={selectAllSheets}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px] transition active:scale-95 shadow-2xs"
+                      >
+                        ជ្រើសរើសទាំងអស់
+                      </button>
+                      <button
+                        type="button"
+                        onClick={deselectAllSheets}
+                        className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-[11px] transition active:scale-95"
+                      >
+                        ដោះទាំងអស់
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Interactive Sheet Checkbox Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {sheetsFound.map(sheet => {
+                      const trimmed = sheet.trim();
+                      const isSelected = selectedSheets.includes(trimmed);
+                      const count = parsedRows.filter(r => r.sheetName === trimmed).length;
+                      return (
+                        <button
+                          key={sheet}
+                          type="button"
+                          onClick={() => toggleSheet(trimmed)}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition active:scale-95 text-left ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50 opacity-80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${
+                              isSelected ? 'bg-white text-blue-600' : 'border border-slate-300 bg-white'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <span className="truncate font-semibold">{trimmed}</span>
+                          </div>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold shrink-0 ml-1.5 ${
+                            isSelected ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {count} មុខ
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Summary Metrics */}
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-100/70 rounded-2xl border border-slate-200 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold text-slate-800">
-                    រកឃើញសរុប: <strong className="text-blue-700 text-sm">{parsedRows.length}</strong> មុខទំនិញ
+                    នឹងនាំចូលសរុប: <strong className="text-blue-700 text-sm">{rowsToImport.length}</strong> មុខទំនិញ
                   </span>
+                  {selectedSheets.length < sheetsFound.length && sheetsFound.length > 1 && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
+                      ពី {selectedSheets.length} Sheet
+                    </span>
+                  )}
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
                     + {newCount} ទំនិញថ្មី
                   </span>
@@ -607,19 +707,19 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
                   )}
                 </div>
 
-                {/* Sheets Filter (if multi-sheet like Daily, Bakery, Fresh, Milk) */}
-                {sheetsFound.length > 1 && (
+                {/* Filter preview table by specific sheet if multiple are selected */}
+                {selectedSheets.length > 1 && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-slate-500 font-medium">សន្លឹក (Sheet):</span>
+                    <span className="text-[11px] text-slate-500 font-medium">មើលក្នុង Preview:</span>
                     <select
-                      value={selectedSheet}
-                      onChange={(e) => setSelectedSheet(e.target.value)}
+                      value={previewFilterSheet}
+                      onChange={(e) => setPreviewFilterSheet(e.target.value)}
                       className="bg-white border border-slate-200 text-xs rounded-xl px-2.5 py-1 text-slate-700 focus:outline-none"
                     >
-                      <option value="all">ទាំងអស់ ({parsedRows.length})</option>
-                      {sheetsFound.map(s => (
-                        <option key={s} value={s.trim()}>
-                          {s.trim()} ({parsedRows.filter(r => r.sheetName === s.trim()).length})
+                      <option value="all">ទាំងអស់ ({rowsToImport.length})</option>
+                      {selectedSheets.map(s => (
+                        <option key={s} value={s}>
+                          {s} ({rowsToImport.filter(r => r.sheetName === s).length})
                         </option>
                       ))}
                     </select>
@@ -637,7 +737,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
                   className="w-full sm:w-72 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-blue-500"
                 />
                 <span className="text-[11px] text-slate-400 shrink-0">
-                  បង្ហាញ {displayRows.length} នៃ {parsedRows.length} មុខ
+                  បង្ហាញ {displayRows.length} នៃ {rowsToImport.length} មុខ
                 </span>
               </div>
 
@@ -658,37 +758,47 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {displayRows.slice(0, 100).map((row, idx) => (
-                      <tr key={row.barcode + idx} className="hover:bg-blue-50/40">
-                        <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                        <td className="py-2 px-3 font-mono font-bold text-slate-800 text-[11px]">{row.barcode}</td>
-                        <td className="py-2 px-3 font-medium text-slate-800 max-w-[200px] truncate">{row.name}</td>
-                        <td className="py-2 px-3 text-slate-500 max-w-[150px] truncate">{row.khmerName || '-'}</td>
-                        <td className="py-2 px-3 text-slate-600">{row.category}</td>
-                        <td className="py-2 px-3 text-center text-slate-600">{row.unit}</td>
-                        <td className="py-2 px-3 text-center font-medium text-slate-700">
-                          {row.currentStock}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 truncate max-w-[140px]">{row.supplierName}</td>
-                        <td className="py-2 px-2 text-center">
-                          {row.isExisting ? (
-                            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">
-                              Update
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
-                              ថ្មី
-                            </span>
-                          )}
+                    {displayRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-slate-400 text-xs">
+                          {rowsToImport.length === 0 
+                            ? 'សូមជ្រើសរើស Sheet ខាងលើដើម្បីមើល និងនាំចូលទំនិញ' 
+                            : 'រកមិនឃើញទំនិញដែលត្រូវនឹងពាក្យស្វែងរកទេ'}
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      displayRows.slice(0, 100).map((row, idx) => (
+                        <tr key={row.barcode + idx} className="hover:bg-blue-50/40">
+                          <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-2 px-3 font-mono font-bold text-slate-800 text-[11px]">{row.barcode}</td>
+                          <td className="py-2 px-3 font-medium text-slate-800 max-w-[200px] truncate">{row.name}</td>
+                          <td className="py-2 px-3 text-slate-500 max-w-[150px] truncate">{row.khmerName || '-'}</td>
+                          <td className="py-2 px-3 text-slate-600">{row.category}</td>
+                          <td className="py-2 px-3 text-center text-slate-600">{row.unit}</td>
+                          <td className="py-2 px-3 text-center font-medium text-slate-700">
+                            {row.currentStock}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 truncate max-w-[140px]">{row.supplierName}</td>
+                          <td className="py-2 px-2 text-center">
+                            {row.isExisting ? (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">
+                                Update
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                                ថ្មី
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
               {displayRows.length > 100 && (
                 <p className="text-[11px] text-slate-400 text-center italic">
-                  (បង្ហាញគំរូ ១០០ មុខដំបូង — ពេល Import នឹងបញ្ចូលទាំងអស់ទាំង {parsedRows.length} មុខ)
+                  (បង្ហាញគំរូ ១០០ មុខដំបូង — ពេល Import នឹងបញ្ចូលមុខទំនិញទាំងអស់ទាំង {rowsToImport.length} មុខ)
                 </p>
               )}
             </div>
@@ -709,18 +819,22 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
             <button
               type="button"
               onClick={handleImportSubmit}
-              disabled={isSubmitting}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95"
+              disabled={isSubmitting || rowsToImport.length === 0}
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95"
             >
               {isSubmitting ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>កំពុងបញ្ចូលទំនិញ...</span>
                 </>
+              ) : rowsToImport.length === 0 ? (
+                <span>សូមជ្រើសរើសយ៉ាងហោចណាស់ ១ Sheet</span>
               ) : (
                 <>
                   <FileSpreadsheet className="w-4 h-4" />
-                  <span>បញ្ជាក់ការ Import ({parsedRows.length} មុខទំនិញ)</span>
+                  <span>
+                    បញ្ជាក់ការ Import ({rowsToImport.length} មុខទំនិញ{selectedSheets.length < sheetsFound.length ? ` ពី ${selectedSheets.length} Sheet` : ''})
+                  </span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
