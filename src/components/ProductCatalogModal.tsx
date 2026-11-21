@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Product } from '../types';
+import { CustomSelect, SelectOption } from './ui/CustomSelect';
+import { ConfirmModal } from './ui/ConfirmModal';
 import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check, FileSpreadsheet, Trash2 } from 'lucide-react';
 
 interface ProductCatalogModalProps {
@@ -26,6 +28,23 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+
+  const categories = useMemo(() => 
+    Array.from(new Set(products.map(p => (p.category || 'ផ្សេងៗ (Other)').trim()))).filter(Boolean),
+    [products]
+  );
+
+  const categoryOptions = useMemo<SelectOption<string>[]>(() => {
+    return [
+      { value: 'all', label: 'ប្រភេទទាំងអស់', badge: products.length },
+      ...categories.map(c => ({
+        value: c,
+        label: c,
+        badge: products.filter(p => (p.category || 'ផ្សេងៗ (Other)').trim() === c).length
+      }))
+    ];
+  }, [categories, products]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -37,8 +56,6 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-
-  const categories = Array.from(new Set(products.map(p => (p.category || 'ផ្សេងៗ (Other)').trim()))).filter(Boolean);
 
   const filtered = products.filter(p => {
     const cat = (p.category || 'ផ្សេងៗ (Other)').trim();
@@ -132,16 +149,16 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <select
+            <CustomSelect<string>
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="flex-1 sm:flex-none bg-slate-50 border border-slate-200 rounded-xl text-xs px-2.5 py-2 text-slate-700 focus:outline-none"
-            >
-              <option value="all">ប្រភេទទាំងអស់ ({products.length})</option>
-              {categories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+              onChange={setSelectedCategory}
+              options={categoryOptions}
+              size="sm"
+              searchable={categories.length > 5}
+              searchPlaceholder="ស្វែងរកប្រភេទ..."
+              className="flex-1 sm:flex-none"
+              buttonClassName="bg-slate-50 border-slate-200"
+            />
 
             <button
               onClick={onResetDemoData}
@@ -219,9 +236,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`តើអ្នកពិតជាចង់លុបទំនិញ «${prod.name}» (Barcode: ${prod.barcode}) ចេញពី Catalog មែនទេ?`)) {
-                              onDeleteProduct(prod.id);
-                            }
+                            setProductToDelete(prod);
                           }}
                           className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
                           title="លុបទំនិញចេញពី Catalog"
@@ -258,6 +273,31 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Confirm Delete Product Modal */}
+      <ConfirmModal
+        isOpen={!!productToDelete}
+        title="បញ្ជាក់ការលុបទំនិញពី Catalog"
+        type="danger"
+        message={
+          productToDelete ? (
+            <span>
+              តើអ្នកពិតជាចង់លុបទំនិញ «<strong className="text-slate-900 font-bold">{productToDelete.name}</strong>» ចេញពី Catalog មែនទេ?
+            </span>
+          ) : null
+        }
+        submessage={productToDelete ? `Barcode: ${productToDelete.barcode} | ផ្នែក: ${productToDelete.category}` : undefined}
+        confirmText="លុបទំនិញ"
+        cancelText="បោះបង់"
+        confirmButtonColor="bg-rose-600 hover:bg-rose-700 text-white"
+        onConfirm={() => {
+          if (productToDelete && onDeleteProduct) {
+            onDeleteProduct(productToDelete.id);
+          }
+          setProductToDelete(null);
+        }}
+        onCancel={() => setProductToDelete(null)}
+      />
     </div>
   );
 };

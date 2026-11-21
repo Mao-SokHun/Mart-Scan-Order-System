@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Camera, X, RefreshCw, Zap, AlertCircle, CheckCircle2, SwitchCamera, HelpCircle } from 'lucide-react';
+import { CustomSelect, SelectOption } from './ui/CustomSelect';
 import { sound } from '../utils/audio';
 
 interface CameraScannerModalProps {
@@ -28,6 +29,14 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isStartingRef = useRef(false);
   const isStoppingRef = useRef(false);
+
+  const cameraOptions = useMemo<SelectOption<string>[]>(() => {
+    return cameras.map((cam, idx) => ({
+      value: cam.id,
+      label: cam.label || `កាមេរ៉ា ${idx + 1}`,
+      icon: <Camera className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+    }));
+  }, [cameras]);
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
   const toastTimerRef = useRef<number | null>(null);
@@ -439,17 +448,17 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
               >
                 <SwitchCamera className="w-4 h-4 text-blue-400" />
               </button>
-              <select
+              <CustomSelect<string>
                 value={selectedCameraId}
-                onChange={(e) => handleCameraChange(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 text-xs rounded-xl px-2.5 py-2.5 text-slate-200 focus:outline-none truncate"
-              >
-                {cameras.map((cam, idx) => (
-                  <option key={cam.id} value={cam.id}>
-                    📷 {cam.label || `កាមេរ៉ា ${idx + 1}`}
-                  </option>
-                ))}
-              </select>
+                onChange={handleCameraChange}
+                options={cameraOptions}
+                variant="dark"
+                size="md"
+                direction="up"
+                fullWidth
+                className="flex-1 min-w-0"
+                buttonClassName="bg-slate-800 border-slate-700 text-slate-200"
+              />
             </div>
           ) : (
             <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-1 truncate">

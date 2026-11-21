@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { RestockItem } from '../types';
+import { CustomSelect, SelectOption } from './ui/CustomSelect';
 import { X, Printer, Filter, CheckCircle2 } from 'lucide-react';
 
 interface PrintPurchaseOrderModalProps {
@@ -17,6 +18,38 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
   const [martName, setMartName] = useState('MART KHMER EXPRESS');
   const [martPhone, setMartPhone] = useState('012 888 999 / 098 777 666');
   const [martAddress, setMartAddress] = useState('រាជធានីភ្នំពេញ, កម្ពុជា');
+  const [poNumber] = useState(() => `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
+
+  const orderableItems = useMemo(() => items.filter(i => i.orderQuantity > 0), [items]);
+  const displayItems = orderableItems.length > 0 ? orderableItems : items;
+
+  const suppliers = useMemo(() => 
+    Array.from(new Set(displayItems.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean),
+    [displayItems]
+  );
+
+  const supplierOptions = useMemo<SelectOption<string>[]>(() => {
+    return [
+      { value: 'all', label: 'អ្នកផ្គត់ផ្គង់ទាំងអស់', badge: displayItems.length },
+      ...suppliers.map(s => ({
+        value: s,
+        label: s,
+        badge: displayItems.filter(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim() === s).length
+      }))
+    ];
+  }, [suppliers, displayItems]);
+
+  const filteredItems = useMemo(() => 
+    selectedSupplier === 'all'
+      ? displayItems
+      : displayItems.filter(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim() === selectedSupplier),
+    [selectedSupplier, displayItems]
+  );
+
+  const totalQty = useMemo(() => 
+    filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0),
+    [filteredItems]
+  );
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -28,18 +61,6 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-
-  const orderableItems = items.filter(i => i.orderQuantity > 0);
-  const displayItems = orderableItems.length > 0 ? orderableItems : items;
-
-  const suppliers = Array.from(new Set(displayItems.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean);
-
-  const filteredItems = selectedSupplier === 'all'
-    ? displayItems
-    : displayItems.filter(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim() === selectedSupplier);
-
-  const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
-  const [poNumber] = useState(() => `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
 
   const handlePrint = () => {
     window.print();
@@ -63,16 +84,16 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
 
           <div className="flex items-center gap-2">
             {/* Filter by supplier */}
-            <select
+            <CustomSelect<string>
               value={selectedSupplier}
-              onChange={(e) => setSelectedSupplier(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-xs rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none"
-            >
-              <option value="all">អ្នកផ្គត់ផ្គង់ទាំងអស់</option>
-              {suppliers.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+              onChange={setSelectedSupplier}
+              options={supplierOptions}
+              variant="dark"
+              size="sm"
+              searchable={suppliers.length > 5}
+              searchPlaceholder="ស្វែងរកអ្នកផ្គត់ផ្គង់..."
+              buttonClassName="bg-slate-800 border-slate-700 text-slate-200"
+            />
 
             <button
               onClick={handlePrint}

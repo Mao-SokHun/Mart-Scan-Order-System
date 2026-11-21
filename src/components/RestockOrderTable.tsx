@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { RestockItem } from '../types';
 import { OrderDay, getCurrentDayOfWeek } from '../utils/export';
+import { CustomSelect, SelectOption } from './ui/CustomSelect';
+import { ConfirmModal } from './ui/ConfirmModal';
 import { 
   Trash2, Plus, Minus, FileSpreadsheet, Printer, 
   Send, Search, Filter, ShoppingBag, AlertTriangle, 
@@ -56,6 +58,27 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   // Extract unique clean suppliers
   const suppliers = Array.from(new Set(items.map(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim()))).filter(Boolean);
 
+  const supplierOptions = useMemo<SelectOption<string>[]>(() => {
+    return [
+      { value: 'all', label: 'អ្នកផ្គត់ផ្គង់ទាំងអស់', badge: items.length },
+      ...suppliers.map(sup => ({
+        value: sup,
+        label: sup,
+        badge: items.filter(i => (i.product.supplierName || 'ទូទៅ (General Supplier)').trim() === sup).length
+      }))
+    ];
+  }, [suppliers, items]);
+
+  const dayOptions: SelectOption<OrderDay>[] = useMemo(() => [
+    { value: 'Mon', label: 'Mon (ច័ន្ទ)' },
+    { value: 'Tue', label: 'Tue (អង្គារ)' },
+    { value: 'Wed', label: 'Wed (ពុធ)' },
+    { value: 'Thu', label: 'Thu (ព្រហស្បតិ៍)' },
+    { value: 'Fri', label: 'Fri (សុក្រ)' },
+    { value: 'Sat', label: 'Sat (សៅរ៍)' },
+    { value: 'Sun', label: 'Sun (អាទិត្យ)' },
+  ], []);
+
   // Multi-term smart filter for item search & supplier filter
   const filteredItems = items.filter(item => {
     const itemSupplier = (item.product.supplierName || 'ទូទៅ (General Supplier)').trim();
@@ -85,13 +108,46 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
   const zeroQtyCount = filteredItems.filter(i => i.orderQuantity <= 0).length;
 
+  // State for beautiful confirm modal (replacing native window.confirm)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    submessage?: React.ReactNode;
+    type?: 'warning' | 'danger' | 'info' | 'success';
+    confirmText?: string;
+    cancelText?: string;
+    confirmButtonColor?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
   const handleExportWithValidation = () => {
     if (filteredItems.length === 0) return;
     if (zeroQtyCount > 0) {
-      const confirm = window.confirm(
-        `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្ត Export ឯកសារ Excel ដែរឬទេ?`
-      );
-      if (!confirm) return;
+      setConfirmDialog({
+        isOpen: true,
+        title: 'មានទំនិញមិនទាន់បញ្ចូលចំនួនទិញ',
+        type: 'warning',
+        message: (
+          <span>
+            មានទំនិញចំនួន <strong className="text-amber-600 font-bold">{zeroQtyCount} មុខ</strong> មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!
+          </span>
+        ),
+        submessage: 'តើ Admin ចង់បន្ត Export ឯកសារ Excel (Daily Plan) ដែរឬទេ?',
+        confirmText: 'បន្ត Export Excel',
+        cancelText: 'ត្រឡប់ក្រោយ',
+        confirmButtonColor: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          onExportExcel(filteredItems, orderDay, supplierFilter);
+        }
+      });
+      return;
     }
     onExportExcel(filteredItems, orderDay, supplierFilter);
   };
@@ -99,24 +155,34 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const handleExportSimplePOWithValidation = () => {
     if (filteredItems.length === 0) return;
     if (zeroQtyCount > 0) {
-      const confirm = window.confirm(
-        `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្ត Export បញ្ជីកុម្ម៉ង់ PO ដែរឬទេ?`
-      );
-      if (!confirm) return;
+      setConfirmDialog({
+        isOpen: true,
+        title: 'មានទំនិញមិនទាន់បញ្ចូលចំនួនទិញ',
+        type: 'warning',
+        message: (
+          <span>
+            មានទំនិញចំនួន <strong className="text-amber-600 font-bold">{zeroQtyCount} មុខ</strong> មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!
+          </span>
+        ),
+        submessage: 'តើ Admin ចង់បន្ត Export បញ្ជីកុម្ម៉ង់ PO ដែរឬទេ?',
+        confirmText: 'បន្ត Export PO',
+        cancelText: 'ត្រឡប់ក្រោយ',
+        confirmButtonColor: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          if (onExportSimplePO) {
+            onExportSimplePO(filteredItems, supplierFilter);
+          }
+        }
+      });
+      return;
     }
     if (onExportSimplePO) {
       onExportSimplePO(filteredItems, supplierFilter);
     }
   };
 
-  const handleCopyTelegram = async () => {
-    if (filteredItems.length === 0) return;
-    if (zeroQtyCount > 0) {
-      const confirm = window.confirm(
-        `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្តចម្លងទៅ Telegram ដែរឬទេ?`
-      );
-      if (!confirm) return;
-    }
+  const handleCopyTelegramDirect = async () => {
     const res = await onCopyToTelegram(filteredItems, orderDay, supplierFilter);
     if (res !== false) {
       setCopiedTelegram(true);
@@ -127,23 +193,59 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   const handleTelegramClick = async () => {
     if (filteredItems.length === 0) return;
     if (zeroQtyCount > 0) {
-      const confirm = window.confirm(
-        `⚠️ មានទំនិញចំនួន ${zeroQtyCount} មុខ មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!\n\nតើ Admin ចង់បន្តផ្ញើទៅ Telegram ដែរឬទេ?`
-      );
-      if (!confirm) return;
+      setConfirmDialog({
+        isOpen: true,
+        title: 'មានទំនិញមិនទាន់បញ្ចូលចំនួនទិញ',
+        type: 'warning',
+        message: (
+          <span>
+            មានទំនិញចំនួន <strong className="text-amber-600 font-bold">{zeroQtyCount} មុខ</strong> មិនទាន់បានបញ្ចូលចំនួនទិញ (ចំនួន = 0)!
+          </span>
+        ),
+        submessage: 'តើ Admin ចង់បន្តផ្ញើទៅ Telegram ដែរឬទេ?',
+        confirmText: 'បន្តផ្ញើ Telegram',
+        cancelText: 'ត្រឡប់ក្រោយ',
+        confirmButtonColor: 'bg-sky-600 hover:bg-sky-700 text-white',
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          if (onOpenTelegramModal) {
+            onOpenTelegramModal(filteredItems, orderDay, supplierFilter);
+          } else {
+            handleCopyTelegramDirect();
+          }
+        }
+      });
+      return;
     }
     if (onOpenTelegramModal) {
       onOpenTelegramModal(filteredItems, orderDay, supplierFilter);
     } else {
-      await handleCopyTelegram();
+      await handleCopyTelegramDirect();
     }
   };
 
-  // Safe removal with confirmation if quantity has already been counted
+  // Safe removal with custom confirmation modal if quantity has already been counted
   const handleSafeRemove = (item: RestockItem) => {
     if (item.orderQuantity > 0) {
-      const ok = window.confirm(`តើអ្នកពិតជាចង់លុបទំនិញ «${item.product.name}» (ចំនួន: ${item.orderQuantity}) ចេញមែនទេ?`);
-      if (!ok) return;
+      setConfirmDialog({
+        isOpen: true,
+        title: 'បញ្ជាក់ការលុបទំនិញ',
+        type: 'danger',
+        message: (
+          <span>
+            តើអ្នកពិតជាចង់លុបទំនិញ «<strong className="text-slate-900 font-bold">{item.product.name}</strong>» ចេញពីតារាងបញ្ជាទិញមែនទេ?
+          </span>
+        ),
+        submessage: `ទំនិញនេះមានចំនួនកុម្ម៉ង់ ${item.orderQuantity} ${item.product.unit || 'ឯកតា'} រួចហើយ។`,
+        confirmText: 'លុបទំនិញ',
+        cancelText: 'ទុកវិញ',
+        confirmButtonColor: 'bg-rose-600 hover:bg-rose-700 text-white',
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          onRemoveItem(item.id);
+        }
+      });
+      return;
     }
     onRemoveItem(item.id);
   };
@@ -231,21 +333,17 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
             {/* Supplier Filter */}
             {suppliers.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <select
-                  value={supplierFilter}
-                  onChange={(e) => setSupplierFilter(e.target.value)}
-                  className="w-full sm:w-auto bg-white border border-slate-200 rounded-xl sm:rounded-lg text-xs px-2.5 py-2 sm:py-1.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="all">អ្នកផ្គត់ផ្គង់ទាំងអស់ ({items.length})</option>
-                  {suppliers.map(sup => (
-                    <option key={sup} value={sup}>
-                      {sup} ({items.filter(i => i.product.supplierName === sup).length})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CustomSelect<string>
+                value={supplierFilter}
+                onChange={setSupplierFilter}
+                options={supplierOptions}
+                icon={<Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+                size="sm"
+                searchable={suppliers.length > 6}
+                searchPlaceholder="ស្វែងរកអ្នកផ្គត់ផ្គង់..."
+                className="w-full sm:w-auto"
+                buttonClassName="bg-white border-slate-200"
+              />
             )}
           </div>
 
@@ -254,23 +352,16 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
             {items.length > 0 && (
               <>
                 {/* Order Day Selector */}
-                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl sm:rounded-lg px-2.5 py-1.5 text-xs shadow-2xs">
-                  <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span className="text-slate-400 font-medium text-[11px] hidden sm:inline">ថ្ងៃកុម្ម៉ង់:</span>
-                  <select
-                    value={orderDay}
-                    onChange={(e) => setOrderDay(e.target.value as OrderDay)}
-                    className="bg-transparent font-bold text-blue-700 text-xs focus:outline-none cursor-pointer"
-                  >
-                    <option value="Mon">Mon (ច័ន្ទ)</option>
-                    <option value="Tue">Tue (អង្គារ)</option>
-                    <option value="Wed">Wed (ពុធ)</option>
-                    <option value="Thu">Thu (ព្រហស្បតិ៍)</option>
-                    <option value="Fri">Fri (សុក្រ)</option>
-                    <option value="Sat">Sat (សៅរ៍)</option>
-                    <option value="Sun">Sun (អាទិត្យ)</option>
-                  </select>
-                </div>
+                <CustomSelect<OrderDay>
+                  value={orderDay}
+                  onChange={setOrderDay}
+                  options={dayOptions}
+                  label="ថ្ងៃកុម្ម៉ង់:"
+                  icon={<Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  size="sm"
+                  align="right"
+                  buttonClassName="bg-white border-slate-200 font-bold text-blue-700"
+                />
 
                 <button
                   onClick={handleExportWithValidation}
@@ -731,6 +822,20 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
           </div>
         </>
       )}
+
+      {/* Modern Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        submessage={confirmDialog.submessage}
+        type={confirmDialog.type}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        confirmButtonColor={confirmDialog.confirmButtonColor}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

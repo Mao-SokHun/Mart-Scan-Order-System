@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Product } from '../types';
 import { saveProducts } from '../utils/storage';
+import { CustomSelect, SelectOption } from './ui/CustomSelect';
 import { 
   X, UploadCloud, FileSpreadsheet, CheckCircle2, 
   AlertCircle, ArrowRight, Download, RefreshCw, Package, Check, Layers 
@@ -724,21 +725,22 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
 
                 {/* Filter preview table by specific sheet if multiple are selected */}
                 {selectedSheets.length > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-slate-500 font-medium">មើលក្នុង Preview:</span>
-                    <select
-                      value={previewFilterSheet}
-                      onChange={(e) => setPreviewFilterSheet(e.target.value)}
-                      className="bg-white border border-slate-200 text-xs rounded-xl px-2.5 py-1 text-slate-700 focus:outline-none"
-                    >
-                      <option value="all">ទាំងអស់ ({rowsToImport.length})</option>
-                      {selectedSheets.map(s => (
-                        <option key={s} value={s}>
-                          {s} ({rowsToImport.filter(r => r.sheetName === s).length})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <CustomSelect<string>
+                    value={previewFilterSheet}
+                    onChange={setPreviewFilterSheet}
+                    options={[
+                      { value: 'all', label: 'ទាំងអស់', badge: rowsToImport.length },
+                      ...selectedSheets.map(s => ({
+                        value: s,
+                        label: s,
+                        badge: rowsToImport.filter(r => r.sheetName === s).length
+                      }))
+                    ]}
+                    label="មើលក្នុង Preview:"
+                    size="sm"
+                    align="right"
+                    buttonClassName="bg-white border-slate-200"
+                  />
                 )}
               </div>
 

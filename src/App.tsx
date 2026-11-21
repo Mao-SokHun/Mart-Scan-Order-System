@@ -24,6 +24,7 @@ import { PrintPurchaseOrderModal } from './components/PrintPurchaseOrderModal';
 import { ImportProductsModal } from './components/ImportProductsModal';
 import { TelegramSendModal } from './components/TelegramSendModal';
 import { BarcodeCardTester } from './components/BarcodeCardTester';
+import { ConfirmModal } from './components/ui/ConfirmModal';
 import { INITIAL_PRODUCTS } from './data/mockProducts';
 
 import { 
@@ -50,6 +51,23 @@ export const App: React.FC = () => {
   const [notFoundBarcode, setNotFoundBarcode] = useState<string>('');
   const [showTestSheet, setShowTestSheet] = useState(false);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
+
+  const [appConfirm, setAppConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    submessage?: React.ReactNode;
+    type?: 'warning' | 'danger' | 'info' | 'success';
+    confirmText?: string;
+    cancelText?: string;
+    confirmButtonColor?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   // References for debouncing keystrokes on quantities to prevent race conditions
   const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -392,25 +410,37 @@ export const App: React.FC = () => {
     }
   };
 
-  // Clear all items
-  const handleClearAll = async () => {
-    if (window.confirm('តើអ្នកពិតជាចង់សម្អាតតារាងបញ្ជាទិញនេះទាំងអស់មែនទេ?')) {
-      // Clear all active timers to prevent pending debounced updates from resurrecting cleared items
-      debounceTimersRef.current.forEach(timer => clearTimeout(timer));
-      debounceTimersRef.current.clear();
-      pendingUpdatesRef.current.clear();
+  // Clear all items with beautiful custom modal
+  const handleClearAll = () => {
+    setAppConfirm({
+      isOpen: true,
+      title: 'បញ្ជាក់ការសម្អាតតារាងបញ្ជាទិញ',
+      type: 'danger',
+      message: 'តើអ្នកពិតជាចង់សម្អាតតារាងបញ្ជាទិញនេះទាំងអស់មែនទេ?',
+      submessage: 'ទំនិញទាំងអស់ដែលបានស្កេនក្នុងតារាងបច្ចុប្បន្ននឹងត្រូវសម្អាតចេញពីប្រព័ន្ធ។',
+      confirmText: 'សម្អាតទាំងអស់',
+      cancelText: 'បោះបង់',
+      confirmButtonColor: 'bg-rose-600 hover:bg-rose-700 text-white',
+      onConfirm: async () => {
+        setAppConfirm(prev => ({ ...prev, isOpen: false }));
+        // Clear all active timers to prevent pending debounced updates from resurrecting cleared items
+        debounceTimersRef.current.forEach(timer => clearTimeout(timer));
+        debounceTimersRef.current.clear();
+        pendingUpdatesRef.current.clear();
 
-      setRestockItems([]);
-      showToast('បានសម្អាតតារាងបញ្ជាទិញរួចរាល់', 'info');
+        setRestockItems([]);
+        saveRestockItems([]);
+        showToast('បានសម្អាតតារាងបញ្ជាទិញរួចរាល់', 'info');
 
-      if (dbStatus.connected) {
-        try {
-          await api.clearRestockItems();
-        } catch (err) {
-          console.error('Failed to clear items in DB:', err);
+        if (dbStatus.connected) {
+          try {
+            await api.clearRestockItems();
+          } catch (err) {
+            console.error('Failed to clear items in DB:', err);
+          }
         }
       }
-    }
+    });
   };
 
   // Save newly registered product
@@ -504,12 +534,23 @@ export const App: React.FC = () => {
     showToast(`បានលុបទំនិញ ${prodName ? `«${prodName}»` : ''} ចេញពី Catalog រួចរាល់`, 'info');
   };
 
-  // Reset to initial demo catalog
+  // Reset to initial demo catalog with custom modal
   const handleResetDemoData = () => {
-    if (window.confirm('តើអ្នកចង់ទាញយកទិន្នន័យពី Neon PostgreSQL ឡើងវិញមែនទេ?')) {
-      loadDataFromDatabase();
-      showToast('បាន Refresh ទិន្នន័យឡើងវិញ', 'info');
-    }
+    setAppConfirm({
+      isOpen: true,
+      title: 'ទាញយកទិន្នន័យឡើងវិញ',
+      type: 'info',
+      message: 'តើអ្នកចង់ទាញយកទិន្នន័យពី Neon PostgreSQL ឡើងវិញមែនទេ?',
+      submessage: 'ប្រព័ន្ធនឹង Refresh ទាញយកទិន្នន័យទំនិញ និងបញ្ជីកុម្ម៉ង់ចុងក្រោយពី Database។',
+      confirmText: 'ទាញយកឡើងវិញ',
+      cancelText: 'បោះបង់',
+      confirmButtonColor: 'bg-blue-600 hover:bg-blue-700 text-white',
+      onConfirm: () => {
+        setAppConfirm(prev => ({ ...prev, isOpen: false }));
+        loadDataFromDatabase();
+        showToast('បាន Refresh ទិន្នន័យឡើងវិញ', 'info');
+      }
+    });
   };
 
   return (
@@ -581,10 +622,10 @@ export const App: React.FC = () => {
         <div className="mb-4 flex items-center justify-between">
           <button
             onClick={() => setShowTestSheet(!showTestSheet)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs transition"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs transition active:scale-95"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>{showTestSheet ? 'លាក់សន្លឹកតេស្ត Barcode លើអេក្រង់' : 'បង្ហាញសន្លឹកតេស្ត Barcode លើអេក្រង់ (Demo)'}</span>
+            <span>{showTestSheet ? 'លាក់សន្លឹកតេស្ត Barcode' : 'តេស្ត Barcode លើអេក្រង់'}</span>
             {showTestSheet ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
@@ -606,6 +647,7 @@ export const App: React.FC = () => {
           <BarcodeCardTester
             products={products}
             onSimulateScan={handleScan}
+            onClose={() => setShowTestSheet(false)}
           />
         )}
 
@@ -789,6 +831,20 @@ export const App: React.FC = () => {
         orderDay={telegramModalDay}
         supplierFilter={telegramModalSupplierFilter}
         onShowToast={showToast}
+      />
+
+      {/* Global App Confirm Modal */}
+      <ConfirmModal
+        isOpen={appConfirm.isOpen}
+        title={appConfirm.title}
+        message={appConfirm.message}
+        submessage={appConfirm.submessage}
+        type={appConfirm.type}
+        confirmText={appConfirm.confirmText}
+        cancelText={appConfirm.cancelText}
+        confirmButtonColor={appConfirm.confirmButtonColor}
+        onConfirm={appConfirm.onConfirm}
+        onCancel={() => setAppConfirm(prev => ({ ...prev, isOpen: false }))}
       />
 
       {/* Mobile Sticky Bottom Bar (Thumb-friendly scanner and order total) */}

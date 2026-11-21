@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Product } from '../types';
+import { CustomSelect, SelectOption } from './ui/CustomSelect';
 import { X, PlusCircle, PackagePlus, AlertCircle } from 'lucide-react';
 
 interface AddProductModalProps {
@@ -44,6 +45,27 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setRemark('');
     setIsSubmitting(false);
   };
+
+  const categoryOptions: SelectOption<string>[] = useMemo(() => [
+    { value: 'ទំនិញប្រចាំថ្ងៃ (Daily)', label: 'ទំនិញប្រចាំថ្ងៃ (Daily)', group: 'ផ្នែកទាំង ៤ ក្នុង Store Daily Plan' },
+    { value: 'នំបុ័ង និងនំខេក (Bakery and Cake)', label: 'នំបុ័ង និងនំខេក (Bakery and Cake)', group: 'ផ្នែកទាំង ៤ ក្នុង Store Daily Plan' },
+    { value: 'បន្លែ ផ្លែឈើ ស្រស់ (Fresh)', label: 'បន្លែ ផ្លែឈើ ស្រស់ (Fresh)', group: 'ផ្នែកទាំង ៤ ក្នុង Store Daily Plan' },
+    { value: 'ទឹកដោះគោ និងយ៉ាអួរ (Milk and Yogurt)', label: 'ទឹកដោះគោ និងយ៉ាអួរ (Milk and Yogurt)', group: 'ផ្នែកទាំង ៤ ក្នុង Store Daily Plan' },
+    { value: 'ភេសជ្ជៈ (Beverages)', label: 'ភេសជ្ជៈ (Beverages)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'ស្រាបៀរ (Beer)', label: 'ស្រាបៀរ (Beer)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'ទឹកបរិសុទ្ធ (Water)', label: 'ទឹកបរិសុទ្ធ (Water)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'មី និងអាហារក្រៀម (Instant Food)', label: 'មី និងអាហារក្រៀម (Instant Food)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'នំចំណី (Snacks)', label: 'នំចំណី (Snacks)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'របស់របរប្រើប្រាស់ (Personal Care)', label: 'របស់របរប្រើប្រាស់ (Personal Care)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)', label: 'សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)', group: 'ប្រភេទផ្សេងៗ' },
+    { value: 'ផ្សេងៗ (Other)', label: 'ផ្សេងៗ (Other)', group: 'ប្រភេទផ្សេងៗ' },
+  ], []);
+
+  const tempOptions: SelectOption<'Dry' | 'Chilled' | 'Frozen'>[] = useMemo(() => [
+    { value: 'Dry', label: 'Dry (ស្ងួត/ធម្មតា)' },
+    { value: 'Chilled', label: 'Chilled (ត្រជាក់/ក្លាស្សេ)' },
+    { value: 'Frozen', label: 'Frozen (កក)' },
+  ], []);
 
   useEffect(() => {
     if (isOpen) {
@@ -183,40 +205,27 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">ផ្នែក (Department)</label>
-              <select
+              <CustomSelect<string>
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-              >
-                <optgroup label="ផ្នែកទាំង ៤ ក្នុង Store Daily Plan">
-                  <option value="ទំនិញប្រចាំថ្ងៃ (Daily)">ទំនិញប្រចាំថ្ងៃ (Daily)</option>
-                  <option value="នំបុ័ង និងនំខេក (Bakery and Cake)">នំបុ័ង និងនំខេក (Bakery and Cake)</option>
-                  <option value="បន្លែ ផ្លែឈើ ស្រស់ (Fresh)">បន្លែ ផ្លែឈើ ស្រស់ (Fresh)</option>
-                  <option value="ទឹកដោះគោ និងយ៉ាអួរ (Milk and Yogurt)">ទឹកដោះគោ និងយ៉ាអួរ (Milk and Yogurt)</option>
-                </optgroup>
-                <optgroup label="ប្រភេទផ្សេងៗ">
-                  <option value="ភេសជ្ជៈ (Beverages)">ភេសជ្ជៈ (Beverages)</option>
-                  <option value="ស្រាបៀរ (Beer)">ស្រាបៀរ (Beer)</option>
-                  <option value="ទឹកបរិសុទ្ធ (Water)">ទឹកបរិសុទ្ធ (Water)</option>
-                  <option value="មី និងអាហារក្រៀម (Instant Food)">មី និងអាហារក្រៀម (Instant Food)</option>
-                  <option value="នំចំណី (Snacks)">នំចំណី (Snacks)</option>
-                  <option value="របស់របរប្រើប្រាស់ (Personal Care)">របស់របរប្រើប្រាស់ (Personal Care)</option>
-                  <option value="សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)">សម្ភារៈបន្ទប់ទឹក/ផ្ទះបាយ (Household)</option>
-                  <option value="ផ្សេងៗ (Other)">ផ្សេងៗ (Other)</option>
-                </optgroup>
-              </select>
+                onChange={setCategory}
+                options={categoryOptions}
+                fullWidth
+                size="md"
+                searchable
+                searchPlaceholder="ស្វែងរកផ្នែកទំនិញ..."
+                buttonClassName="bg-slate-50 border-slate-200"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">សីតុណ្ហភាព (Temp)</label>
-              <select
+              <CustomSelect<'Dry' | 'Chilled' | 'Frozen'>
                 value={storageTemp}
-                onChange={(e) => setStorageTemp(e.target.value as any)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 font-medium"
-              >
-                <option value="Dry">Dry (ស្ងួត/ធម្មតា)</option>
-                <option value="Chilled">Chilled (ត្រជាក់/ក្លាស្សេ)</option>
-                <option value="Frozen">Frozen (កក)</option>
-              </select>
+                onChange={setStorageTemp}
+                options={tempOptions}
+                fullWidth
+                size="md"
+                buttonClassName="bg-slate-50 border-slate-200 font-medium"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">ឯកតារាប់ (Unit)</label>
