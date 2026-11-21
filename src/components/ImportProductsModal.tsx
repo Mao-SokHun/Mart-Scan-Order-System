@@ -603,7 +603,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
 
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[11px] bg-white border border-slate-200 px-2.5 py-1 rounded-full text-slate-600 font-medium shadow-2xs">
-                  គាំទ្រ Daily Plan, Takeo Plan, Supermarket Catalog
+                  គាំទ្រ Daily Plan, Supermarket Catalog
                 </span>
                 <button
                   type="button"

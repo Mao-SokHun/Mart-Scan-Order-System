@@ -1126,7 +1126,7 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
 
         const formData = new FormData();
         formData.append('chat_id', cleanChatId);
-        formData.append('document', blob, fileName || 'Takeo_Daily_Order_Plan.xlsx');
+        formData.append('document', blob, fileName || 'Daily_Order_Plan.xlsx');
 
         if (caption) {
           formData.append('caption', caption.slice(0, 1024));
@@ -1149,7 +1149,7 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
           if (caption && docData.description?.includes("can't parse entities")) {
             const retryFormData = new FormData();
             retryFormData.append('chat_id', cleanChatId);
-            retryFormData.append('document', blob, fileName || 'Takeo_Daily_Order_Plan.xlsx');
+            retryFormData.append('document', blob, fileName || 'Daily_Order_Plan.xlsx');
             retryFormData.append('caption', stripHtml(caption).slice(0, 1024));
 
             const retryRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {

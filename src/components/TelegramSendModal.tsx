@@ -257,7 +257,7 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-sky-100 font-medium">
-                ផ្ញើឯកសារ Excel (Takeo Plan) និងបញ្ជីទំនិញកុម្ម៉ង់ចូល Telegram របស់ User
+                ផ្ញើឯកសារ Excel និងបញ្ជីទំនិញកុម្ម៉ង់ដោយស្វ័យប្រវត្តិ
               </p>
             </div>
           </div>
@@ -434,7 +434,7 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
                     <span>ឯកសារ Excel (.xlsx)</span>
                   </div>
                   <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
-                    ប្លង់ Takeo Daily Plan (Header លឿង) បែងចែកតាម Sheet ផ្នែកនីមួយៗ
+                    ប្លង់ Daily Order Plan (Header លឿង) បែងចែកតាម Sheet ផ្នែកនីមួយៗ
                   </p>
                 </div>
               </label>
