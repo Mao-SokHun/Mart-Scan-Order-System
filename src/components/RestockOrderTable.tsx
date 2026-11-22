@@ -251,7 +251,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col mb-12 sm:mb-6">
+    <div id="restock-order-table-container" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col mb-12 sm:mb-6 scroll-mt-20">
       {/* Table Header Controls */}
       <div className="p-3.5 sm:p-5 border-b border-slate-200/80 bg-slate-50/60">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
@@ -347,71 +347,126 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2 justify-end flex-wrap pt-1 sm:pt-0">
+          {/* Action Buttons (Desktop & Mobile Responsive Layout) */}
+          <div className="w-full sm:w-auto">
             {items.length > 0 && (
               <>
-                {/* Order Day Selector */}
-                <CustomSelect<OrderDay>
-                  value={orderDay}
-                  onChange={setOrderDay}
-                  options={dayOptions}
-                  label="ថ្ងៃកុម្ម៉ង់:"
-                  icon={<Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-                  size="sm"
-                  align="right"
-                  buttonClassName="bg-white border-slate-200 font-bold text-blue-700"
-                />
+                {/* 💻 Desktop View: Clean Inline Toolbar (sm and up) */}
+                <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 justify-end flex-wrap">
+                  {/* Order Day Selector */}
+                  <CustomSelect<OrderDay>
+                    value={orderDay}
+                    onChange={setOrderDay}
+                    options={dayOptions}
+                    label="ថ្ងៃកុម្ម៉ង់:"
+                    icon={<Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                    size="sm"
+                    align="right"
+                    buttonClassName="bg-white border-slate-200 font-bold text-blue-700"
+                  />
 
-                <button
-                  onClick={handleExportWithValidation}
-                  disabled={filteredItems.length === 0}
-                  className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
-                  title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Daily Plan (មានទាំង PO Summary + 4 Sheets + ចំនួនត្រូវទិញ)"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>Excel Plan ({orderDay})</span>
-                </button>
-
-                {onExportSimplePO && (
                   <button
-                    onClick={handleExportSimplePOWithValidation}
+                    onClick={handleExportWithValidation}
                     disabled={filteredItems.length === 0}
-                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-700 border border-emerald-300 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
-                    title="ទាញយកបញ្ជីកុម្ម៉ង់ PO សាមញ្ញ (1 Sheet)"
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
+                    title="ទាញយកជាឯកសារ Excel តាមទម្រង់ Daily Plan"
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="hidden sm:inline">Excel</span>
-                    <span>PO សាមញ្ញ</span>
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Excel Plan ({orderDay})</span>
                   </button>
-                )}
 
-                <button
-                  onClick={handleTelegramClick}
-                  disabled={filteredItems.length === 0}
-                  className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-sky-50 hover:bg-sky-100 disabled:opacity-50 disabled:cursor-not-allowed text-sky-700 border border-sky-200 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
-                  title="បាញ់ឯកសារ Excel និងបញ្ជីទំនិញទៅកាន់ Telegram"
-                >
-                  <Send className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Telegram</span>
-                </button>
+                  {onExportSimplePO && (
+                    <button
+                      onClick={handleExportSimplePOWithValidation}
+                      disabled={filteredItems.length === 0}
+                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-700 border border-emerald-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
+                      title="ទាញយកបញ្ជីកុម្ម៉ង់ PO សាមញ្ញ (1 Sheet)"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>PO សាមញ្ញ</span>
+                    </button>
+                  )}
 
-                <button
-                  onClick={onOpenPrintPO}
-                  className="px-2.5 py-2 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl sm:rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition"
-                  title="បោះពុម្ពសន្លឹកបញ្ជាទិញ (Print Purchase Order)"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Print</span>
-                </button>
+                  <button
+                    onClick={handleTelegramClick}
+                    disabled={filteredItems.length === 0}
+                    className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs active:scale-95"
+                    title="បាញ់ឯកសារ Excel និងបញ្ជីទំនិញទៅកាន់ Telegram"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Telegram</span>
+                  </button>
 
-                <button
-                  onClick={onClearAll}
-                  className="p-2 sm:px-2.5 sm:py-1.5 text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl sm:rounded-lg text-xs font-semibold transition"
-                  title="សម្អាតតារាងទាំងមូល"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  <button
+                    onClick={onOpenPrintPO}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition"
+                    title="បោះពុម្ពសន្លឹកបញ្ជាទិញ (Print Purchase Order)"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print</span>
+                  </button>
+
+                  <button
+                    onClick={onClearAll}
+                    className="p-1.5 text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl text-xs font-semibold transition"
+                    title="សម្អាតតារាងទាំងមូល"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* 📱 Mobile View: Touch-Friendly 2-Row Layout (< sm) */}
+                <div className="flex sm:hidden flex-col gap-2 w-full pt-1">
+                  {/* Row 1: Day selector + Print + Clear */}
+                  <div className="flex items-center gap-1.5 justify-between">
+                    <div className="flex-1 min-w-0">
+                      <CustomSelect<OrderDay>
+                        value={orderDay}
+                        onChange={setOrderDay}
+                        options={dayOptions}
+                        label="ថ្ងៃកុម្ម៉ង់:"
+                        icon={<Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                        size="sm"
+                        fullWidth
+                        buttonClassName="bg-white border-slate-200 font-bold text-blue-700"
+                      />
+                    </div>
+                    <button
+                      onClick={onOpenPrintPO}
+                      className="px-3 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 shrink-0 active:scale-95"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print</span>
+                    </button>
+                    <button
+                      onClick={onClearAll}
+                      className="p-2 text-rose-600 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold shrink-0 active:scale-95"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Row 2: Two Prominent Full-Width Export Buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleExportWithValidation}
+                      disabled={filteredItems.length === 0}
+                      className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Excel ({orderDay})</span>
+                    </button>
+
+                    <button
+                      onClick={handleTelegramClick}
+                      disabled={filteredItems.length === 0}
+                      className="py-2.5 px-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Telegram</span>
+                    </button>
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -531,61 +586,78 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                     </div>
                   </div>
 
-                  {/* Bottom Quantity Control Center (Touch-friendly) */}
-                  <div className="mt-2.5 flex items-center justify-between gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onUpdateQuantity(item.id, Math.max(0, (item.orderQuantity || 0) - 1))}
-                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-700 active:scale-90 transition shadow-2xs font-bold text-base"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
+                  {/* Bottom Quantity Control Center (Touch-friendly & Ergonomic) */}
+                  <div className="mt-2.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onUpdateQuantity(item.id, Math.max(0, (item.orderQuantity || 0) - 1))}
+                          className="w-10 h-10 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 active:scale-90 transition shadow-2xs font-bold text-base"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
 
-                      <div className="relative">
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          min="0"
-                          placeholder="0"
-                          value={item.orderQuantity === 0 ? '' : item.orderQuantity}
-                          onFocus={(e) => e.target.select()}
-                          onKeyDown={(e) => {
-                            if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          }}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            onUpdateQuantity(item.id, val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
-                          }}
-                          className={`w-16 h-9 text-center text-sm font-extrabold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
-                            isZeroQty 
-                              ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-[0_0_8px_rgba(245,158,11,0.4)]' 
-                              : 'bg-white border-slate-300 text-slate-900'
-                          }`}
-                        />
+                        <div className="relative">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            min="0"
+                            placeholder="0"
+                            value={item.orderQuantity === 0 ? '' : item.orderQuantity}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => {
+                              if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              onUpdateQuantity(item.id, val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                            }}
+                            className={`w-16 h-10 text-center text-sm font-extrabold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
+                              isZeroQty 
+                                ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-[0_0_8px_rgba(245,158,11,0.4)]' 
+                                : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onUpdateQuantity(item.id, (item.orderQuantity || 0) + 1)}
+                          className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center active:scale-90 transition shadow-2xs font-bold text-base"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+
+                        <span className="text-xs text-slate-500 font-medium ml-0.5">
+                          {item.product.unit}
+                        </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => onUpdateQuantity(item.id, (item.orderQuantity || 0) + 1)}
-                        className="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center active:scale-90 transition shadow-2xs font-bold text-base"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-
-                      <span className="text-[11px] text-slate-500 ml-1">
-                        {item.product.unit}
-                      </span>
+                      {/* Quantity Display */}
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-400 block font-medium">ចំនួនបញ្ជាទិញ</span>
+                        <span className={`text-sm font-extrabold ${isZeroQty ? 'text-amber-600' : 'text-blue-600'}`}>
+                          {item.orderQuantity} {item.product.unit}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Quantity Display */}
-                    <div className="text-right shrink-0">
-                      <span className="text-[10px] text-slate-400 block">ចំនួនបញ្ជាទិញ</span>
-                      <span className={`text-sm font-extrabold ${isZeroQty ? 'text-amber-600' : 'text-blue-600'}`}>
-                        {item.orderQuantity} {item.product.unit}
-                      </span>
+                    {/* Quick Add Presets: +1, +6, +12, +24 */}
+                    <div className="flex items-center gap-1.5 pt-2 mt-2 border-t border-slate-200/70 overflow-x-auto">
+                      <span className="text-[10px] text-slate-400 font-semibold shrink-0">ថែមរហ័ស:</span>
+                      {[1, 6, 12, 24].map((step) => (
+                        <button
+                          key={step}
+                          type="button"
+                          onClick={() => onUpdateQuantity(item.id, (item.orderQuantity || 0) + step)}
+                          className="px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 active:bg-blue-100 text-slate-700 hover:text-blue-700 border border-slate-200 text-[11px] font-bold active:scale-95 transition shadow-2xs shrink-0"
+                        >
+                          +{step}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -788,6 +860,21 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                               {item.orderQuantity} {item.product.unit}
                             </span>
                           )}
+
+                          {/* Quick Presets on Desktop: +1, +6, +12, +24 */}
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {[1, 6, 12, 24].map((step) => (
+                              <button
+                                key={step}
+                                type="button"
+                                onClick={() => onUpdateQuantity(item.id, (item.orderQuantity || 0) + step)}
+                                className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-[10px] font-bold border border-slate-200/80 active:scale-95 transition"
+                                title={`ថែម +${step} ${item.product.unit}`}
+                              >
+                                +{step}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </td>
 

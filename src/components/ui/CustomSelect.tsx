@@ -221,7 +221,7 @@ export function CustomSelect<T extends string | number>({
             align === 'right' ? 'right-0' : 'left-0'
           } ${
             direction === 'up' ? 'bottom-full mb-1.5' : 'mt-1.5'
-          } z-50 min-w-[180px] max-w-[340px] w-max max-h-72 overflow-y-auto rounded-2xl border shadow-xl backdrop-blur-md transition-all duration-150 animate-in fade-in zoom-in-95 p-1.5 ${
+          } z-50 min-w-[180px] max-w-[calc(100vw-32px)] sm:max-w-[340px] w-max max-h-72 overflow-y-auto overflow-x-hidden rounded-2xl border shadow-xl backdrop-blur-md transition-all duration-150 animate-in fade-in zoom-in-95 p-1.5 ${
             isDark
               ? 'bg-slate-900/95 border-slate-700/80 text-slate-200 divide-slate-800'
               : 'bg-white/95 border-slate-200/90 text-slate-800 divide-slate-100'

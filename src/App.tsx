@@ -30,7 +30,7 @@ import { INITIAL_PRODUCTS } from './data/mockProducts';
 import { 
   Store, Camera, Package, Plus, Sparkles, 
   CheckCircle, AlertCircle, ShoppingBag, 
-  ChevronDown, ChevronUp, Bell, Database, RefreshCw, FileSpreadsheet 
+  ChevronDown, ChevronUp, Bell, Database, RefreshCw, FileSpreadsheet, Send 
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -586,11 +586,14 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setIsCatalogOpen(true)}
-              className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
-              title="មើលបញ្ជីទំនិញទាំងអស់"
+              className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 relative"
+              title={`មើលបញ្ជីទំនិញទាំងអស់ (${products.length} មុខ)`}
             >
               <Package className="w-4 h-4 text-slate-600" />
               <span className="hidden md:inline">ទំនិញ ({products.length})</span>
+              <span className="md:hidden text-[9px] bg-blue-100 text-blue-700 font-bold px-1 rounded-full">
+                {products.length}
+              </span>
             </button>
 
             <button
@@ -653,8 +656,15 @@ export const App: React.FC = () => {
 
         {/* Quick Dashboard Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4 sm:mb-6">
-          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <div 
+            onClick={() => {
+              const tableElem = document.getElementById('restock-order-table-container');
+              tableElem?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3 cursor-pointer hover:border-blue-300 hover:shadow-xs transition group"
+            title="ចុចដើម្បីមើលតារាងបញ្ជាទិញ"
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
               <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
@@ -663,8 +673,15 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+          <div 
+            onClick={() => {
+              const tableElem = document.getElementById('restock-order-table-container');
+              tableElem?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group"
+            title="ចុចដើម្បីមើលតារាងបញ្ជាទិញ"
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
               <Package className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
@@ -674,10 +691,21 @@ export const App: React.FC = () => {
           </div>
 
           {/* Card 3: Pending Input or Readiness Status */}
-          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
-            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${
+          <div 
+            onClick={() => {
+              const tableElem = document.getElementById('restock-order-table-container');
+              tableElem?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className={`p-3 sm:p-4 rounded-2xl border shadow-2xs flex items-center gap-3 cursor-pointer transition group ${
+              restockItems.filter(i => i.orderQuantity <= 0).length > 0
+                ? 'bg-amber-50/60 border-amber-300 hover:border-amber-400 hover:shadow-xs'
+                : 'bg-white border-slate-200/80 hover:border-emerald-300 hover:shadow-xs'
+            }`}
+            title="ចុចដើម្បីពិនិត្យទំនិញចាំវាយចំនួន"
+          >
+            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition ${
               restockItems.filter(i => i.orderQuantity <= 0).length > 0 
-                ? 'bg-amber-50 text-amber-600' 
+                ? 'bg-amber-100 text-amber-700' 
                 : 'bg-emerald-50 text-emerald-600'
             }`}>
               {restockItems.filter(i => i.orderQuantity <= 0).length > 0 ? (
@@ -775,6 +803,7 @@ export const App: React.FC = () => {
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onScan={handleScan}
+        products={products}
       />
 
       {/* Add New Product Modal */}
@@ -848,23 +877,47 @@ export const App: React.FC = () => {
       />
 
       {/* Mobile Sticky Bottom Bar (Thumb-friendly scanner and order total) */}
-      <div className="md:hidden print:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-2.5 flex items-center justify-between z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
-        <div className="min-w-0 pr-2">
-          <span className="text-[10px] text-slate-500 block font-medium truncate">
-            ទំនិញក្នុងតារាងបញ្ជាទិញ
+      <div className="md:hidden print:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3.5 py-2.5 flex items-center justify-between z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <button
+          type="button"
+          onClick={() => {
+            const tableElem = document.getElementById('restock-order-table-container');
+            tableElem?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="min-w-0 pr-2 text-left cursor-pointer active:opacity-75"
+        >
+          <span className="text-[10px] text-slate-400 block font-medium truncate">
+            ទំនិញក្នុងតារាងកុម្ម៉ង់
           </span>
-          <span className="text-sm font-extrabold text-blue-600">
+          <span className="text-xs font-extrabold text-blue-600 truncate block">
             {restockItems.length} មុខ • {restockItems.reduce((a, c) => a + (c.orderQuantity || 0), 0)} ឯកតា
           </span>
-        </div>
-
-        <button
-          onClick={handleOpenCamera}
-          className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 active:scale-95 text-white rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md shadow-blue-500/25 shrink-0"
-        >
-          <Camera className="w-4 h-4" />
-          <span>ស្កេន Barcode</span>
         </button>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {restockItems.length > 0 && (
+            <button
+              onClick={() => {
+                setTelegramModalDay(getCurrentDayOfWeek());
+                setTelegramModalSupplierFilter('all');
+                setIsTelegramModalOpen(true);
+              }}
+              className="px-3 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm shrink-0"
+              title="ផ្ញើទៅ Telegram"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Telegram</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleOpenCamera}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/25 shrink-0"
+          >
+            <Camera className="w-4 h-4" />
+            <span>ស្កេន</span>
+          </button>
+        </div>
       </div>
     </div>
   );

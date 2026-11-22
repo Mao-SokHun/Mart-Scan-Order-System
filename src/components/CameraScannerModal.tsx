@@ -2,18 +2,21 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Camera, X, RefreshCw, Zap, AlertCircle, CheckCircle2, SwitchCamera, HelpCircle } from 'lucide-react';
 import { CustomSelect, SelectOption } from './ui/CustomSelect';
+import { Product } from '../types';
 import { sound } from '../utils/audio';
 
 interface CameraScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onScan: (barcode: string) => void;
+  products?: Product[];
 }
 
 export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   isOpen,
   onClose,
-  onScan
+  onScan,
+  products = []
 }) => {
   const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
@@ -23,6 +26,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
+  const [lastScannedProduct, setLastScannedProduct] = useState<{ barcode: string; name?: string; khmerName?: string } | null>(null);
   const [scanCount, setScanCount] = useState<number>(0);
 
   // References to prevent race conditions and concurrent calls
@@ -67,9 +71,18 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     lastScannedCodeRef.current = cleanCode;
     lastScannedTimeRef.current = now;
+    const found = products.find(p => p.barcode === cleanCode);
     setLastScannedCode(cleanCode);
+    setLastScannedProduct({
+      barcode: cleanCode,
+      name: found?.name,
+      khmerName: found?.khmerName
+    });
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setLastScannedCode(null), 2500);
+    toastTimerRef.current = window.setTimeout(() => {
+      setLastScannedCode(null);
+      setLastScannedProduct(null);
+    }, 2800);
     setScanCount(prev => prev + 1);
 
     // Immediate sound feedback
@@ -77,7 +90,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     // Notify parent
     onScan(cleanCode);
-  }, [onScan]);
+  }, [onScan, products]);
 
   // Clean stop for camera hardware and scanner instance
   const stopScanner = useCallback(async () => {
@@ -400,11 +413,29 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             </div>
           )}
 
-          {/* Realtime Toast Badge for recent scan */}
-          {lastScannedCode && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600/95 text-white px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-xl backdrop-blur-md animate-bounce z-30">
-              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-              <span>បានស្កេន: {lastScannedCode}</span>
+          {/* Realtime Toast Badge for recent scan with Product details */}
+          {lastScannedProduct && (
+            <div className="absolute top-4 inset-x-4 max-w-sm mx-auto bg-emerald-600/95 text-white px-3.5 py-2 rounded-2xl text-xs font-semibold flex items-center justify-between gap-2 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 z-30 border border-emerald-400/40">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
+                <div className="min-w-0 truncate text-left">
+                  <p className="font-bold truncate text-white text-xs">
+                    {lastScannedProduct.name || `Barcode: ${lastScannedProduct.barcode}`}
+                  </p>
+                  {lastScannedProduct.khmerName ? (
+                    <p className="text-[10px] text-emerald-100 truncate">
+                      {lastScannedProduct.khmerName} • <span className="font-mono">{lastScannedProduct.barcode}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-emerald-100 font-mono">
+                      {lastScannedProduct.barcode}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold shrink-0">
+                +1 ចូលតារាង
+              </span>
             </div>
           )}
 
