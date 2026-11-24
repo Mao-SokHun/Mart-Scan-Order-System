@@ -164,7 +164,26 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
 
   // Main action: Send to Telegram
   const handleSendToTelegram = async () => {
-    const target = chatId || usernameInput.trim();
+    let target = usernameInput.trim();
+
+    // If usernameInput corresponds to a detected chat with a known numeric ID, use numeric ID for 100% direct delivery
+    if (chatId && /^-?\d+$/.test(chatId)) {
+      const cleanInput = usernameInput.replace(/^@/, '').toLowerCase().trim();
+      const match = detectedChats.find(c => c.id === chatId);
+      if (match) {
+        const u = (match.username || '').toLowerCase().trim();
+        const n = (match.name || '').toLowerCase().trim();
+        if (cleanInput === u || cleanInput === n || cleanInput === chatId) {
+          target = chatId;
+        }
+      } else if (!target || target === chatId) {
+        target = chatId;
+      }
+    }
+    if (!target && chatId) {
+      target = chatId.trim();
+    }
+
     if (!target) {
       setErrorMessage('សូមបញ្ចូល ឬជ្រើសរើស Telegram Username របស់ User ជាមុនសិន!');
       return;

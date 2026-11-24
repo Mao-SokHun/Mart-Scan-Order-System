@@ -398,7 +398,7 @@ app.get('/api/products', async (req: Request, res: Response) => {
   try {
     const search = req.query.search || req.query.q;
     const hasLimit = req.query.limit !== undefined;
-    const limit = hasLimit ? Math.min(5000, Math.max(1, safeInt(req.query.limit, 1000))) : 5000;
+    const limit = hasLimit ? Math.min(50000, Math.max(1, safeInt(req.query.limit, 1000))) : 50000;
     const offset = Math.max(0, safeInt(req.query.offset, 0));
 
     let result;
@@ -610,6 +610,8 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
           current_stock = EXCLUDED.current_stock,
           min_stock = EXCLUDED.min_stock,
           supplier_name = COALESCE(EXCLUDED.supplier_name, products.supplier_name),
+          supplier_phone = COALESCE(EXCLUDED.supplier_phone, products.supplier_phone),
+          image = COALESCE(EXCLUDED.image, products.image),
           remark = COALESCE(EXCLUDED.remark, products.remark),
           storage_temp = COALESCE(EXCLUDED.storage_temp, products.storage_temp),
           updated_at = CURRENT_TIMESTAMP;
@@ -839,15 +841,9 @@ app.post('/api/restock/batch', async (req: Request, res: Response) => {
           id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at, note, status
         ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8)
         ON CONFLICT (product_id) DO UPDATE SET
-          order_quantity = CASE 
-            WHEN EXCLUDED.order_quantity > 0 THEN EXCLUDED.order_quantity 
-            ELSE restock_items.order_quantity 
-          END,
+          order_quantity = EXCLUDED.order_quantity,
           total_cost = ROUND(
-            (CASE 
-              WHEN EXCLUDED.order_quantity > 0 THEN EXCLUDED.order_quantity 
-              ELSE restock_items.order_quantity 
-            END) * EXCLUDED.unit_cost, 
+            (EXCLUDED.order_quantity * EXCLUDED.unit_cost)::numeric, 
             2
           ),
           note = COALESCE(EXCLUDED.note, restock_items.note),
@@ -945,7 +941,9 @@ const stripHtml = (html: string): string => {
 app.get('/api/telegram/info', async (req: Request, res: Response) => {
   try {
     const token = (req.query.token as string) || DEFAULT_TELEGRAM_BOT_TOKEN;
-    const tgRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const tgRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
+      signal: AbortSignal.timeout(10000)
+    });
     const data: any = await tgRes.json();
     if (!data.ok) {
       return res.status(400).json({ ok: false, error: data.description || 'Invalid Telegram bot token' });
@@ -965,46 +963,78 @@ app.get('/api/telegram/info', async (req: Request, res: Response) => {
 app.get('/api/telegram/updates', async (req: Request, res: Response) => {
   try {
     const token = (req.query.token as string) || DEFAULT_TELEGRAM_BOT_TOKEN;
-    const tgRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&offset=-100`);
-    const data: any = await tgRes.json();
+    const chatsMap = new Map<string, any>();
 
-    if (!data.ok) {
-      return res.status(400).json({ ok: false, error: data.description || 'Failed to fetch Telegram updates' });
+    // 1. Seed with previously known chats from database so older interactions are never lost
+    try {
+      const dbRow = await pool.query("SELECT value FROM app_settings WHERE key = 'telegram_known_chats' LIMIT 1;");
+      if (dbRow.rows.length > 0 && dbRow.rows[0].value) {
+        const cachedChats = JSON.parse(dbRow.rows[0].value);
+        if (Array.isArray(cachedChats)) {
+          for (const c of cachedChats) {
+            if (c && c.id) chatsMap.set(String(c.id), c);
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Could not read cached telegram_known_chats from DB:', dbErr);
     }
 
-    const chatsMap = new Map<string, any>();
-    const updates = Array.isArray(data.result) ? data.result : [];
+    // 2. Fetch fresh updates from Telegram Bot API with timeout
+    try {
+      const tgRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&offset=-100`, {
+        signal: AbortSignal.timeout(10000)
+      });
+      const data: any = await tgRes.json();
 
-    for (const update of updates) {
-      const msg = update.message || update.channel_post || update.edited_message || update.my_chat_member;
-      const chat = msg?.chat;
-      if (!chat || !chat.id) continue;
+      if (data.ok && Array.isArray(data.result)) {
+        for (const update of data.result) {
+          const msg = update.message || update.channel_post || update.edited_message || update.my_chat_member;
+          const chat = msg?.chat;
+          if (!chat || !chat.id) continue;
 
-      const from = msg?.from;
-      const chatIdStr = String(chat.id);
-      const isGroup = chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel';
+          const from = msg?.from;
+          const chatIdStr = String(chat.id);
+          const isGroup = chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel';
 
-      const displayName = isGroup
-        ? (chat.title || 'ក្រុម (Group)')
-        : (`${from?.first_name || chat.first_name || ''} ${from?.last_name || chat.last_name || ''}`.trim() || chat.username || `User ${chat.id}`);
+          const displayName = isGroup
+            ? (chat.title || 'ក្រុម (Group)')
+            : (`${from?.first_name || chat.first_name || ''} ${from?.last_name || chat.last_name || ''}`.trim() || chat.username || `User ${chat.id}`);
 
-      const msgDate = msg?.date ? new Date(msg.date * 1000).toISOString() : new Date().toISOString();
+          const msgDate = msg?.date ? new Date(msg.date * 1000).toISOString() : new Date().toISOString();
 
-      if (!chatsMap.has(chatIdStr) || new Date(msgDate) > new Date(chatsMap.get(chatIdStr).lastActive)) {
-        chatsMap.set(chatIdStr, {
-          id: chatIdStr,
-          type: chat.type,
-          name: displayName,
-          username: chat.username || from?.username || '',
-          lastActive: msgDate,
-          lastText: msg?.text || (msg?.document ? '📎 Document' : msg?.photo ? '📷 Photo' : 'Joined/Started')
-        });
+          if (!chatsMap.has(chatIdStr) || new Date(msgDate) > new Date(chatsMap.get(chatIdStr).lastActive)) {
+            chatsMap.set(chatIdStr, {
+              id: chatIdStr,
+              type: chat.type,
+              name: displayName,
+              username: chat.username || from?.username || '',
+              lastActive: msgDate,
+              lastText: msg?.text || (msg?.document ? '📎 Document' : msg?.photo ? '📷 Photo' : 'Joined/Started')
+            });
+          }
+        }
       }
+    } catch (fetchErr) {
+      console.warn('Telegram getUpdates request warning:', fetchErr);
     }
 
     const chats = Array.from(chatsMap.values()).sort(
       (a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime()
     );
+
+    // 3. Persist consolidated chats map back into Neon PostgreSQL
+    if (chats.length > 0) {
+      try {
+        await pool.query(`
+          INSERT INTO app_settings (key, value, updated_at)
+          VALUES ('telegram_known_chats', $1, CURRENT_TIMESTAMP)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
+        `, [JSON.stringify(chats)]);
+      } catch (saveErr) {
+        console.warn('Failed to persist telegram_known_chats to DB:', saveErr);
+      }
+    }
 
     res.json({
       ok: true,
@@ -1072,14 +1102,17 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
 
     let cleanChatId = String(chatId).trim();
 
-    // If cleanChatId is not numeric (e.g. @username or text name), auto-resolve from recent bot updates
+    // If cleanChatId is not numeric (e.g. @username or text name), auto-resolve from recent bot updates or cached DB chats
     const isNumeric = /^-?\d+$/.test(cleanChatId);
     if (!isNumeric) {
       const searchTarget = cleanChatId.replace(/^@/, '').toLowerCase().trim();
       let foundId: string | null = null;
 
+      // 1. Try resolving from live getUpdates
       try {
-        const tgRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&offset=-100`);
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&offset=-100`, {
+          signal: AbortSignal.timeout(8000)
+        });
         const data: any = await tgRes.json();
         if (data.ok && Array.isArray(data.result)) {
           for (const update of data.result) {
@@ -1098,15 +1131,40 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
           }
         }
       } catch (lookupErr) {
-        console.warn('Telegram username resolution failed:', lookupErr);
+        console.warn('Telegram username resolution via live getUpdates failed:', lookupErr);
+      }
+
+      // 2. Fallback to DB cached chats in app_settings (in case getUpdates was cleared by Telegram after 24h)
+      if (!foundId) {
+        try {
+          const dbRow = await pool.query("SELECT value FROM app_settings WHERE key = 'telegram_known_chats' LIMIT 1;");
+          if (dbRow.rows.length > 0 && dbRow.rows[0].value) {
+            const cachedChats = JSON.parse(dbRow.rows[0].value);
+            if (Array.isArray(cachedChats)) {
+              for (const c of cachedChats) {
+                const uName = (c.username || '').toLowerCase().trim();
+                const fName = (c.name || '').toLowerCase().trim();
+                if (uName === searchTarget || fName === searchTarget || (searchTarget.length > 2 && fName.includes(searchTarget))) {
+                  foundId = String(c.id);
+                  break;
+                }
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Telegram username resolution via DB cache failed:', dbErr);
+        }
       }
 
       if (foundId) {
         cleanChatId = foundId;
+      } else if (cleanChatId.startsWith('@')) {
+        // If cleanChatId is formatted as @channelusername, pass it directly as Telegram allows public channels
+        // Telegram API will return error if invalid or private
       } else {
         return res.status(400).json({
           success: false,
-          error: `រកមិនឃើញគណនី Telegram «${chatId}» ក្នុង Bot នៅឡើយទេ!\n👉 សូមប្រាកដថា User បានចុច "START" លើ Bot @Digital_Invitation_Link_bot រួចហើយ។`
+          error: `រកមិនឃើញគណនី Telegram «${chatId}» ក្នុង Bot នៅឡើយទេ!\n👉 សូមប្រាកដថា User បានចុច "START" លើ Bot @Digital_Invitation_Link_bot រួចហើយ ឬចុច "🔍 រក Username ស្វ័យប្រវត្តិ"។`
         });
       }
     }
@@ -1135,7 +1193,8 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
 
         const docRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
           method: 'POST',
-          body: formData
+          body: formData,
+          signal: AbortSignal.timeout(20000)
         });
         const docData: any = await docRes.json();
 
@@ -1154,7 +1213,8 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
 
             const retryRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
               method: 'POST',
-              body: retryFormData
+              body: retryFormData,
+              signal: AbortSignal.timeout(20000)
             });
             const retryData: any = await retryRes.json();
             if (retryData.ok) {
@@ -1167,6 +1227,11 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
         console.error('Exception during document send:', docErr);
         lastTelegramError = docErr.message;
       }
+    }
+
+    // Small pause between document and message to respect Telegram API rate limit
+    if (documentSent && messageText && messageText.trim()) {
+      await new Promise(r => setTimeout(r, 250));
     }
 
     // B. Send Text Message if provided
@@ -1187,7 +1252,8 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
               chat_id: cleanChatId,
               text: textToSend,
               parse_mode: 'HTML'
-            })
+            }),
+            signal: AbortSignal.timeout(15000)
           });
           let msgData: any = await msgRes.json();
 

@@ -97,7 +97,8 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
 
             <button
               onClick={handlePrint}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+              disabled={filteredItems.length === 0}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition active:scale-95"
             >
               <Printer className="w-4 h-4" />
               <span>បោះពុម្ព / Save PDF</span>
@@ -187,22 +188,31 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredItems.map((item, idx) => (
-                <tr key={item.id} className="print:break-inside-avoid">
-                  <td className="py-2 px-2 text-center text-slate-500 font-mono">{idx + 1}</td>
-                  <td className="py-2 px-3 font-mono text-[11px] text-slate-600">{item.product.barcode}</td>
-                  <td className="py-2 px-3">
-                    <p className="font-semibold text-slate-800">{item.product.name}</p>
-                    {item.product.khmerName && (
-                      <p className="text-[11px] text-slate-500">{item.product.khmerName}</p>
-                    )}
+              {filteredItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400 italic">
+                    <p className="font-semibold text-slate-600 mb-1">មិនទាន់មានទំនិញក្នុងតារាងសម្រាប់បោះពុម្ពទេ</p>
+                    <p className="text-[11px] text-slate-400">សូមស្កេនទំនិញ ឬបញ្ចូលចំនួនកុម្ម៉ង់ក្នុងតារាងជាមុនសិន</p>
                   </td>
-                  <td className="py-2 px-3 text-slate-600">{item.product.category}</td>
-                  <td className="py-2 px-3 text-center text-slate-600">{item.product.unit}</td>
-                  <td className="py-2 px-3 text-center font-bold text-blue-700 text-sm">{item.orderQuantity}</td>
-                  <td className="py-2 px-3 text-slate-700">{item.product.supplierName}</td>
                 </tr>
-              ))}
+              ) : (
+                filteredItems.map((item, idx) => (
+                  <tr key={item.id} className="print:break-inside-avoid">
+                    <td className="py-2 px-2 text-center text-slate-500 font-mono">{idx + 1}</td>
+                    <td className="py-2 px-3 font-mono text-[11px] text-slate-600">{item.product.barcode}</td>
+                    <td className="py-2 px-3">
+                      <p className="font-semibold text-slate-800">{item.product.name}</p>
+                      {item.product.khmerName && (
+                        <p className="text-[11px] text-slate-500">{item.product.khmerName}</p>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-slate-600">{item.product.category}</td>
+                    <td className="py-2 px-3 text-center text-slate-600">{item.product.unit}</td>
+                    <td className="py-2 px-3 text-center font-bold text-blue-700 text-sm">{item.orderQuantity}</td>
+                    <td className="py-2 px-3 text-slate-700">{item.product.supplierName}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-800 font-bold text-slate-900">
