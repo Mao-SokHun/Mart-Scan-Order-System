@@ -71,7 +71,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
     lastScannedCodeRef.current = cleanCode;
     lastScannedTimeRef.current = now;
-    const found = products.find(p => p.barcode === cleanCode);
+    const found = products.find(p => p.barcode.toLowerCase() === cleanCode.toLowerCase());
     setLastScannedCode(cleanCode);
     setLastScannedProduct({
       barcode: cleanCode,

@@ -146,11 +146,18 @@ export const App: React.FC = () => {
           });
 
           // Check for items added completely offline that aren't in dbRestock
+          // IMPORTANT: Skip items that were explicitly deleted this session (prevent resurrection)
           for (const localItem of prevLocal) {
             const existsInDb = dbRestock.some(m => m.product.id === localItem.product.id || m.id === localItem.id);
             if (!existsInDb) {
-              merged.push(localItem);
-              unSynced.push(localItem);
+              // Don't resurrect items that the user just deleted this session
+              const isDeleted = deletedItemIdsRef.current.has(localItem.id) ||
+                (localItem.product?.id && deletedItemIdsRef.current.has(localItem.product.id));
+              if (!isDeleted && localItem.orderQuantity > 0) {
+                // Only sync back truly offline-added items (qty > 0 means user intentionally added them)
+                merged.push(localItem);
+                unSynced.push(localItem);
+              }
             }
           }
 
@@ -197,6 +204,33 @@ export const App: React.FC = () => {
       pendingUpdatesRef.current.clear();
     };
   }, [loadDataFromDatabase]);
+
+  // 🔄 Real-time cross-device polling: sync restock items every 20 seconds
+  // This makes Device A and Device B see the same data within ~20 seconds
+  useEffect(() => {
+    if (!dbStatus.connected) return;
+    const pollInterval = setInterval(async () => {
+      try {
+        const dbRestock = await api.getRestockItems();
+        setRestockItems(prev => {
+          // DB is the source of truth; preserve active user edits (pending keystrokes)
+          const merged = dbRestock.map(dbItem => {
+            const pendingQty = pendingUpdatesRef.current.get(dbItem.id) ??
+              pendingUpdatesRef.current.get(dbItem.product?.id ?? '');
+            if (pendingQty !== undefined) {
+              return { ...dbItem, orderQuantity: pendingQty };
+            }
+            return dbItem;
+          });
+          saveRestockItems(merged);
+          return merged;
+        });
+      } catch (e) {
+        console.warn('Polling restock items error:', e);
+      }
+    }, 20000); // Every 20 seconds
+    return () => clearInterval(pollInterval);
+  }, [dbStatus.connected]);
 
   // Synchronize state with LocalStorage for offline resilience
   useEffect(() => {
@@ -388,6 +422,9 @@ export const App: React.FC = () => {
     }
   };
 
+  // Track explicitly deleted item IDs to prevent resurrection from localStorage merge
+  const deletedItemIdsRef = useRef<Set<string>>(new Set());
+
   // Remove single item
   const handleRemoveItem = async (itemId: string) => {
     // Clear pending debounce timer if user removes item
@@ -398,7 +435,16 @@ export const App: React.FC = () => {
     pendingUpdatesRef.current.delete(itemId);
 
     const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
-    setRestockItems(prev => prev.filter(i => i.id !== itemId && i.product.id !== itemId));
+
+    // Track deleted IDs to block localStorage resurrection
+    deletedItemIdsRef.current.add(itemId);
+    if (targetItem?.product?.id) deletedItemIdsRef.current.add(targetItem.product.id);
+
+    setRestockItems(prev => {
+      const updated = prev.filter(i => i.id !== itemId && i.product.id !== itemId);
+      saveRestockItems(updated); // ← CRITICAL: persist to localStorage immediately
+      return updated;
+    });
     showToast('បានលុបទំនិញចេញពីតារាង', 'info');
 
     if (dbStatus.connected) {
@@ -406,6 +452,7 @@ export const App: React.FC = () => {
         await api.deleteRestockItem(itemId, targetItem?.product?.id, targetItem?.product?.barcode);
       } catch (err) {
         console.error('Failed to delete item from DB:', err);
+        showToast('លុបក្នុង DB មានបញ្ហា សូមព្យាយាមម្តងទៀត', 'error');
       }
     }
   };
