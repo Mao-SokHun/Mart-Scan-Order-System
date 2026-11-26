@@ -3,7 +3,8 @@ import { Product, RestockItem } from './types';
 import { api, HealthStatus } from './services/api';
 import { 
   getStoredProducts, saveProducts, 
-  getStoredRestockItems, saveRestockItems 
+  getStoredRestockItems, saveRestockItems,
+  getOfflineDirtyOps, upsertOfflineDirtyOp, removeOfflineDirtyOp, clearOfflineDirtyOps
 } from './utils/storage';
 import { 
   exportDailyPlanExcel, 
@@ -16,7 +17,7 @@ import { sound } from './utils/audio';
 import { useBarcodeGun } from './hooks/useBarcodeGun';
 
 import { ManualBarcodeInput } from './components/ManualBarcodeInput';
-import { CameraScannerModal } from './components/CameraScannerModal';
+import { CameraScannerModal, ScanOutcome } from './components/CameraScannerModal';
 import { RestockOrderTable } from './components/RestockOrderTable';
 import { AddProductModal } from './components/AddProductModal';
 import { ProductCatalogModal } from './components/ProductCatalogModal';
@@ -69,9 +70,20 @@ export const App: React.FC = () => {
     onConfirm: () => {}
   });
 
-  // References for debouncing keystrokes on quantities to prevent race conditions
-  const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // Always-fresh refs so callbacks/async flows never suffer from React 18 batching or stale closures
+  const productsRef = useRef<Product[]>(products);
+  productsRef.current = products;
+  const restockItemsRef = useRef<RestockItem[]>(restockItems);
+  restockItemsRef.current = restockItems;
+  const dbConnectedRef = useRef<boolean>(dbStatus.connected);
+  dbConnectedRef.current = dbStatus.connected;
+
+  // References for debouncing & preventing race conditions (always keyed by immutable product.id)
+  const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingUpdatesRef = useRef<Map<string, number>>(new Map());
+  const inFlightDeletesRef = useRef<Map<string, number>>(new Map()); // productId -> timestamp
+  const inFlightScansRef = useRef<Map<string, RestockItem>>(new Map()); // productId -> optimistic item
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleOpenCamera = () => {
     sound.warmup();
@@ -82,22 +94,154 @@ export const App: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const toastTimerRef = React.useRef<number | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, type });
     toastTimerRef.current = window.setTimeout(() => {
       setToast(null);
     }, 3000);
-  };
+  }, []);
 
-  // 1. Fetch initial data from Neon PostgreSQL
-  const loadDataFromDatabase = useCallback(async () => {
+  // Smart barcode lookup (case-insensitive trimmed + numeric UPC-A/EAN-13 leading-zero fallback)
+  const findProductInCatalog = useCallback((list: Product[], barcode: string): Product | undefined => {
+    const clean = barcode.trim().toLowerCase().replace(/\.0$/, '');
+    const exact = list.find(p => (p.barcode || '').trim().toLowerCase().replace(/\.0$/, '') === clean);
+    if (exact) return exact;
+    if (/^\d{12,13}$/.test(clean)) {
+      const stripped = clean.replace(/^0+/, '');
+      return list.find(p => (p.barcode || '').trim().toLowerCase().replace(/^0+/, '') === stripped);
+    }
+    return undefined;
+  }, []);
+
+  // Merge authoritative DB restock rows with active local in-flight edits/scans/deletes
+  const reconcileWithDbRestock = useCallback((dbRestock: RestockItem[]) => {
+    const now = Date.now();
+    // Expire delete guards older than 6s (after server DELETE has safely settled)
+    for (const [key, ts] of inFlightDeletesRef.current.entries()) {
+      if (now - ts > 6000) inFlightDeletesRef.current.delete(key);
+    }
+
+    const offlineOps = getOfflineDirtyOps();
+    const offlineDeletedIds = new Set(
+      offlineOps.filter(o => o.type === 'delete').map(o => o.productId)
+    );
+
+    // Filter out items currently being deleted or queued offline for deletion
+    const filteredDb = dbRestock.filter(dbItem => {
+      const pid = dbItem.product?.id;
+      if (pid && (inFlightDeletesRef.current.has(pid) || offlineDeletedIds.has(pid))) return false;
+      if (inFlightDeletesRef.current.has(dbItem.id)) return false;
+      return true;
+    });
+
+    // Overlay active debounced user quantity edits & offline dirty edits
+    const offlineUpsertsMap = new Map(
+      offlineOps.filter(o => o.type === 'upsert' && o.item).map(o => [o.productId, o.item!])
+    );
+
+    const dbProductIds = new Set<string>();
+    const merged: RestockItem[] = filteredDb.map(dbItem => {
+      const pid = dbItem.product?.id;
+      if (pid) dbProductIds.add(pid);
+
+      const pendingQty =
+        (pid ? pendingUpdatesRef.current.get(pid) : undefined) ??
+        pendingUpdatesRef.current.get(dbItem.id);
+
+      if (pendingQty !== undefined) {
+        const uc = dbItem.unitCost || 0;
+        return {
+          ...dbItem,
+          orderQuantity: pendingQty,
+          totalCost: Math.round(pendingQty * uc * 100) / 100
+        };
+      }
+
+      if (pid && offlineUpsertsMap.has(pid)) {
+        const offlineItem = offlineUpsertsMap.get(pid)!;
+        return {
+          ...dbItem,
+          orderQuantity: offlineItem.orderQuantity,
+          totalCost: offlineItem.totalCost
+        };
+      }
+
+      return dbItem;
+    });
+
+    // Preserve brand-new scans still in-flight to Neon DB or offline-queued upserts
+    for (const [pid, scanItem] of inFlightScansRef.current.entries()) {
+      if (!dbProductIds.has(pid) && !inFlightDeletesRef.current.has(pid)) {
+        const pendingQty = pendingUpdatesRef.current.get(pid) ?? scanItem.orderQuantity;
+        merged.unshift({ ...scanItem, orderQuantity: pendingQty });
+        dbProductIds.add(pid);
+      }
+    }
+    for (const [pid, offItem] of offlineUpsertsMap.entries()) {
+      if (!dbProductIds.has(pid) && !inFlightDeletesRef.current.has(pid)) {
+        merged.unshift(offItem);
+        dbProductIds.add(pid);
+      }
+    }
+
+    setRestockItems(merged);
+    saveRestockItems(merged);
+  }, []);
+
+  // Flush genuine offline-only mutations (never blind localStorage snapshots!)
+  const flushOfflineDirtyOps = useCallback(async () => {
+    const ops = getOfflineDirtyOps();
+    if (ops.length === 0) return;
+
+    const remaining: typeof ops = [];
+    for (const op of ops) {
+      try {
+        if (op.type === 'delete') {
+          await api.deleteRestockItem(op.productId, op.productId, op.barcode);
+        } else if (op.type === 'upsert' && op.item) {
+          await api.syncBatchRestockItems([op.item]);
+        }
+      } catch (e) {
+        remaining.push(op);
+      }
+    }
+    if (remaining.length === 0) {
+      clearOfflineDirtyOps();
+    } else {
+      clearOfflineDirtyOps();
+      remaining.forEach(upsertOfflineDirtyOp);
+    }
+  }, []);
+
+  // Lightweight restock-only sync for real-time cross-device updates
+  const isSyncingRestockRef = useRef(false);
+  const syncRestockFromDb = useCallback(async () => {
+    if (isSyncingRestockRef.current) return;
+    isSyncingRestockRef.current = true;
+    try {
+      await flushOfflineDirtyOps();
+      const dbRestock = await api.getRestockItems();
+      reconcileWithDbRestock(dbRestock);
+      if (!dbConnectedRef.current) {
+        setDbStatus(prev => ({ ...prev, connected: true }));
+      }
+    } catch {
+      // Silently ignore transient poll failures
+    } finally {
+      isSyncingRestockRef.current = false;
+    }
+  }, [flushOfflineDirtyOps, reconcileWithDbRestock]);
+
+  // 1. Full data fetch from Neon PostgreSQL (Products + Restock Items)
+  const loadDataFromDatabase = useCallback(async (showFeedbackToast = false) => {
     try {
       setIsLoading(true);
       const health = await api.checkHealth();
       setDbStatus(health);
 
       if (health.connected) {
+        await flushOfflineDirtyOps();
         const [dbProducts, dbRestock] = await Promise.all([
           api.getProducts(),
           api.getRestockItems()
@@ -106,74 +250,22 @@ export const App: React.FC = () => {
           setProducts(dbProducts);
           saveProducts(dbProducts);
         }
-        setRestockItems(prevLocal => {
-          if (!prevLocal || prevLocal.length === 0) {
-            saveRestockItems(dbRestock);
-            return dbRestock;
-          }
-          const unSynced: RestockItem[] = [];
-          const localMap = new Map<string, RestockItem>();
-          for (const loc of prevLocal) {
-            if (loc.product?.id) localMap.set(loc.product.id, loc);
-            if (loc.id) localMap.set(loc.id, loc);
-          }
-
-          // Merge db items with offline local overrides and active user keystrokes
-          const merged: RestockItem[] = dbRestock.map(dbItem => {
-            // If user is actively typing a quantity for this item, preserve active input
-            if (pendingUpdatesRef.current.has(dbItem.id)) {
-              const pendingQty = pendingUpdatesRef.current.get(dbItem.id)!;
-              return { ...dbItem, orderQuantity: pendingQty };
-            }
-            if (pendingUpdatesRef.current.has(dbItem.product.id)) {
-              const pendingQty = pendingUpdatesRef.current.get(dbItem.product.id)!;
-              return { ...dbItem, orderQuantity: pendingQty };
-            }
-
-            const locItem = localMap.get(dbItem.product.id) || localMap.get(dbItem.id);
-            if (locItem) {
-              // If user modified quantity or details locally while offline, preserve local edits
-              if (locItem.orderQuantity > 0 && dbItem.orderQuantity === 0) {
-                unSynced.push({ ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost });
-                return { ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost };
-              }
-              if (locItem.orderQuantity !== dbItem.orderQuantity && locItem.orderQuantity > 0) {
-                unSynced.push({ ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost });
-                return { ...dbItem, orderQuantity: locItem.orderQuantity, totalCost: locItem.totalCost };
-              }
-            }
-            return dbItem;
-          });
-
-          // Check for items added completely offline that aren't in dbRestock
-          // IMPORTANT: Skip items that were explicitly deleted this session (prevent resurrection)
-          for (const localItem of prevLocal) {
-            const existsInDb = dbRestock.some(m => m.product.id === localItem.product.id || m.id === localItem.id);
-            if (!existsInDb) {
-              // Don't resurrect items that the user just deleted this session
-              const isDeleted = deletedItemIdsRef.current.has(localItem.id) ||
-                (localItem.product?.id && deletedItemIdsRef.current.has(localItem.product.id));
-              if (!isDeleted && localItem.orderQuantity > 0) {
-                // Only sync back truly offline-added items (qty > 0 means user intentionally added them)
-                merged.push(localItem);
-                unSynced.push(localItem);
-              }
-            }
-          }
-
-          if (unSynced.length > 0) {
-            api.syncBatchRestockItems(unSynced).catch(e => console.warn('Sync offline restock items error:', e));
-          }
-          saveRestockItems(merged);
-          return merged;
-        });
+        reconcileWithDbRestock(dbRestock);
+        if (showFeedbackToast) {
+          showToast('បានទាញយកទិន្នន័យចុងក្រោយពី Database រួចរាល់', 'success');
+        }
+      } else if (showFeedbackToast) {
+        showToast('មិនអាចភ្ជាប់ Database បានទេ (ប្រើទិន្នន័យ Offline)', 'error');
       }
     } catch (err) {
       console.warn('Backend not reached yet, using local storage cache:', err);
+      if (showFeedbackToast) {
+        showToast('មានបញ្ហាក្នុងការទាញយកទិន្នន័យ', 'error');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [flushOfflineDirtyOps, reconcileWithDbRestock, showToast]);
 
   useEffect(() => {
     loadDataFromDatabase();
@@ -182,55 +274,56 @@ export const App: React.FC = () => {
       console.log('🌐 Browser online detected, re-syncing with Neon DB...');
       loadDataFromDatabase();
     };
-    window.addEventListener('online', handleOnline);
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        syncRestockFromDb();
+      }
+    };
 
-    // Poll db health every 30s
-    const interval = setInterval(async () => {
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+
+    // Health + full product sync every 45s when tab is active
+    const healthInterval = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
       const health = await api.checkHealth();
       setDbStatus(prev => {
-        // If connection just restored from offline, automatically sync with DB!
         if (!prev.connected && health.connected) {
           loadDataFromDatabase();
         }
         return health;
       });
-    }, 30000);
+      if (health.connected) {
+        api.getProducts().then(dbProds => {
+          if (dbProds && dbProds.length > 0) {
+            setProducts(dbProds);
+            saveProducts(dbProds);
+          }
+        }).catch(() => {});
+      }
+    }, 45000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
-      clearInterval(interval);
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      clearInterval(healthInterval);
       debounceTimersRef.current.forEach(timer => clearTimeout(timer));
       debounceTimersRef.current.clear();
       pendingUpdatesRef.current.clear();
     };
-  }, [loadDataFromDatabase]);
+  }, [loadDataFromDatabase, syncRestockFromDb]);
 
-  // 🔄 Real-time cross-device polling: sync restock items every 20 seconds
-  // This makes Device A and Device B see the same data within ~20 seconds
+  // 🔄 Real-time cross-device polling: sync restock table every 4 seconds when active
   useEffect(() => {
-    if (!dbStatus.connected) return;
-    const pollInterval = setInterval(async () => {
-      try {
-        const dbRestock = await api.getRestockItems();
-        setRestockItems(prev => {
-          // DB is the source of truth; preserve active user edits (pending keystrokes)
-          const merged = dbRestock.map(dbItem => {
-            const pendingQty = pendingUpdatesRef.current.get(dbItem.id) ??
-              pendingUpdatesRef.current.get(dbItem.product?.id ?? '');
-            if (pendingQty !== undefined) {
-              return { ...dbItem, orderQuantity: pendingQty };
-            }
-            return dbItem;
-          });
-          saveRestockItems(merged);
-          return merged;
-        });
-      } catch (e) {
-        console.warn('Polling restock items error:', e);
-      }
-    }, 20000); // Every 20 seconds
+    const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      syncRestockFromDb();
+    }, 4000);
     return () => clearInterval(pollInterval);
-  }, [dbStatus.connected]);
+  }, [syncRestockFromDb]);
 
   // Synchronize state with LocalStorage for offline resilience
   useEffect(() => {
@@ -243,91 +336,118 @@ export const App: React.FC = () => {
     }
   }, [products]);
 
-  // Handle Scanning Barcode (Used by both Barcode Gun & Camera Scanner & Manual Input)
-  const handleScan = useCallback(async (scannedBarcode: string) => {
+  const highlightItemTemporarily = useCallback((id: string) => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    setHighlightedItemId(id);
+    highlightTimerRef.current = setTimeout(() => setHighlightedItemId(null), 2500);
+  }, []);
+
+  // Handle Scanning Barcode (Used by Barcode Gun, Camera Scanner & Manual Input)
+  const handleScan = useCallback(async (scannedBarcode: string): Promise<ScanOutcome> => {
     let cleanBarcode = scannedBarcode.replace(/[\r\n\t]/g, '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
-    if (!cleanBarcode) return;
+    if (!cleanBarcode) return 'ignored';
 
-    // ⚡ 1. ULTRA-FAST INSTANT IN-MEMORY SCAN (0ms latency):
-    // Check locally cached catalog first so data pops into the table instantaneously!
-    const foundProduct = products.find(p => p.barcode.toLowerCase() === cleanBarcode.toLowerCase());
+    // ⚡ 1. ULTRA-FAST INSTANT IN-MEMORY SCAN (uses refs to avoid React 18 batching bugs):
+    const foundProduct = findProductInCatalog(productsRef.current, cleanBarcode);
 
     if (foundProduct) {
       sound.playSuccessBeep();
 
-      // Check if item already exists in restock table
-      let alreadyExists = false;
-      let existingId = '';
+      // Clear any previous delete guard if re-scanning the same product
+      inFlightDeletesRef.current.delete(foundProduct.id);
+      removeOfflineDirtyOp(foundProduct.id);
 
-      setRestockItems(prevItems => {
-        const existingIndex = prevItems.findIndex(
-          i => i.product.id === foundProduct.id || i.product.barcode.toLowerCase() === cleanBarcode.toLowerCase()
-        );
+      const currentItems = restockItemsRef.current;
+      const existingItem = currentItems.find(
+        i =>
+          i.product.id === foundProduct.id ||
+          (i.product.barcode || '').trim().toLowerCase() === foundProduct.barcode.trim().toLowerCase()
+      );
 
-        if (existingIndex > -1) {
-          alreadyExists = true;
-          existingId = prevItems[existingIndex].id;
-          return prevItems; // Do not increment or duplicate
-        }
+      if (existingItem) {
+        highlightItemTemporarily(existingItem.id);
+        showToast(`⚠️ «${foundProduct.name}» មានក្នុងតារាងរួចហើយ! (មិនបូកស្ទួនចំនួនទេ)`, 'info');
+        return 'already_exists';
+      }
 
-        // New item: 0ms Instant addition with orderQuantity = 0
-        const newItem: RestockItem = {
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          product: foundProduct,
-          orderQuantity: 0,
-          scannedAt: new Date().toISOString(),
-          unitCost: foundProduct.costPrice || 0,
-          totalCost: 0
-        };
-        existingId = newItem.id;
-        return [newItem, ...prevItems];
+      const tempId = `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const newItem: RestockItem = {
+        id: tempId,
+        product: foundProduct,
+        orderQuantity: 0,
+        scannedAt: new Date().toISOString(),
+        unitCost: foundProduct.costPrice || 0,
+        totalCost: 0
+      };
+
+      inFlightScansRef.current.set(foundProduct.id, newItem);
+      setRestockItems(prev => {
+        if (prev.some(i => i.product.id === foundProduct.id)) return prev;
+        const updated = [newItem, ...prev];
+        saveRestockItems(updated);
+        return updated;
       });
 
-      if (alreadyExists) {
-        setHighlightedItemId(existingId);
-        setTimeout(() => setHighlightedItemId(null), 2500);
-        showToast(`⚠️ «${foundProduct.name}» មានក្នុងតារាងរួចហើយ! (មិនបូកស្ទួនចំនួនទេ)`, 'info');
-      } else {
-        setHighlightedItemId(existingId);
-        setTimeout(() => setHighlightedItemId(null), 2500);
-        showToast(`✅ បានស្កេន «${foundProduct.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
+      highlightItemTemporarily(tempId);
+      showToast(`✅ បានស្កេន «${foundProduct.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
 
-        // Asynchronous non-blocking background sync to Neon DB
-        if (dbStatus.connected) {
-          api.scanBarcode(cleanBarcode).then(res => {
+      // Background sync to Neon DB whenever browser is online (don't wait for dbStatus flag)
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        api.scanBarcode(foundProduct.barcode || cleanBarcode)
+          .then(res => {
+            inFlightScansRef.current.delete(foundProduct.id);
+            setDbStatus(prev => (prev.connected ? prev : { ...prev, connected: true }));
             if (res.found && res.item) {
               setRestockItems(prev => prev.map(i => {
-                if (i.id === existingId || i.product.id === foundProduct.id) {
-                  // Protect user's active typed quantity against race condition overwrite
-                  const activeQty = i.orderQuantity;
+                if (i.id === tempId || i.product.id === foundProduct.id) {
+                  const activeQty = pendingUpdatesRef.current.get(foundProduct.id) ?? i.orderQuantity;
                   return {
                     ...res.item!,
                     id: res.item!.id,
                     orderQuantity: activeQty > 0 ? activeQty : res.item!.orderQuantity,
-                    totalCost: activeQty > 0 
-                      ? Math.round(activeQty * (res.item!.unitCost || 0) * 100) / 100 
+                    totalCost: activeQty > 0
+                      ? Math.round(activeQty * (res.item!.unitCost || 0) * 100) / 100
                       : res.item!.totalCost
                   };
                 }
                 return i;
               }));
             }
-          }).catch(err => {
-            console.warn('Background sync scan failed:', err);
+          })
+          .catch(err => {
+            console.warn('Background sync scan failed, queuing offline:', err);
+            inFlightScansRef.current.delete(foundProduct.id);
+            upsertOfflineDirtyOp({
+              type: 'upsert',
+              productId: foundProduct.id,
+              barcode: foundProduct.barcode,
+              item: newItem,
+              timestamp: Date.now()
+            });
           });
-        }
+      } else {
+        inFlightScansRef.current.delete(foundProduct.id);
+        upsertOfflineDirtyOp({
+          type: 'upsert',
+          productId: foundProduct.id,
+          barcode: foundProduct.barcode,
+          item: newItem,
+          timestamp: Date.now()
+        });
       }
-      return;
+      return 'added';
     }
 
-    // 🌐 2. SERVER FALLBACK LOOKUP:
-    // Only if product was NOT in local memory (e.g. registered on another machine)
-    if (dbStatus.connected) {
+    // 🌐 2. SERVER FALLBACK LOOKUP (always try if browser is online):
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) {
       try {
         const res = await api.scanBarcode(cleanBarcode);
+        setDbStatus(prev => (prev.connected ? prev : { ...prev, connected: true }));
         if (res.found && res.item) {
           const item = res.item;
+          inFlightDeletesRef.current.delete(item.product.id);
+          removeOfflineDirtyOp(item.product.id);
 
           // Add to local products catalog for future instant scans
           setProducts(prev => {
@@ -335,26 +455,23 @@ export const App: React.FC = () => {
             return exists ? prev : [item.product, ...prev];
           });
 
-          if (res.action === 'already_exists') {
-            sound.playSuccessBeep();
-            setHighlightedItemId(item.id);
-            setTimeout(() => setHighlightedItemId(null), 2500);
-            showToast(`⚠️ «${item.product.name}» មានក្នុងតារាងរួចហើយ! (មិនបូកស្ទួនចំនួនទេ)`, 'info');
-            return;
-          }
-
           sound.playSuccessBeep();
           setRestockItems(prev => {
             const exists = prev.some(i => i.id === item.id || i.product.id === item.product.id);
-            if (exists) {
-              return prev.map(i => (i.id === item.id || i.product.id === item.product.id) ? item : i);
-            }
-            return [item, ...prev];
+            const updated = exists
+              ? prev.map(i => (i.id === item.id || i.product.id === item.product.id) ? item : i)
+              : [item, ...prev];
+            saveRestockItems(updated);
+            return updated;
           });
-          setHighlightedItemId(item.id);
-          setTimeout(() => setHighlightedItemId(null), 2500);
+
+          highlightItemTemporarily(item.id);
+          if (res.action === 'already_exists') {
+            showToast(`⚠️ «${item.product.name}» មានក្នុងតារាងរួចហើយ! (មិនបូកស្ទួនចំនួនទេ)`, 'info');
+            return 'already_exists';
+          }
           showToast(`✅ បានស្កេន «${item.product.name}» ចូលតារាង! សូម Admin វាយចំនួន`, 'success');
-          return;
+          return 'added';
         }
       } catch (e) {
         console.warn('API scan failed:', e);
@@ -366,7 +483,8 @@ export const App: React.FC = () => {
     setNotFoundBarcode(cleanBarcode);
     setIsAddProductOpen(true);
     showToast(`រកមិនឃើញ Barcode "${cleanBarcode}" ក្នុងប្រព័ន្ធទេ!`, 'error');
-  }, [dbStatus.connected, products]);
+    return 'not_found';
+  }, [findProductInCatalog, highlightItemTemporarily, showToast]);
 
   // Global listener for USB/Bluetooth Barcode Scanner Guns
   useBarcodeGun({
@@ -374,88 +492,145 @@ export const App: React.FC = () => {
     enabled: !isAddProductOpen && !isPrintPOOpen && !isCatalogOpen && !isCameraOpen && !isImportExcelOpen && !isTelegramModalOpen
   });
 
-  // Quantity updater with 350ms debouncing per item to eliminate network race conditions
-  const handleUpdateQuantity = (itemId: string, newQty: number) => {
+  // Quantity updater with 250ms debouncing keyed consistently by immutable product.id
+  const handleUpdateQuantity = useCallback((itemId: string, newQty: number) => {
     if (newQty < 0) return;
 
-    // Track active user keystroke
-    pendingUpdatesRef.current.set(itemId, newQty);
+    const targetItem = restockItemsRef.current.find(i => i.id === itemId || i.product.id === itemId);
+    const trackingKey = targetItem?.product?.id || itemId;
 
-    const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
+    // Track active user keystroke by product.id so ID swap from temp->DB never races
+    pendingUpdatesRef.current.set(trackingKey, newQty);
+
+    const updatedItemForOffline: RestockItem | undefined = targetItem
+      ? {
+          ...targetItem,
+          orderQuantity: newQty,
+          totalCost: Math.round(newQty * (targetItem.unitCost || 0) * 100) / 100
+        }
+      : undefined;
 
     // Optimistic local update: 60 FPS instantaneous UI response
-    setRestockItems(prev => prev.map(item => {
-      if (item.id === itemId || item.product.id === itemId) {
-        return {
-          ...item,
-          orderQuantity: newQty,
-          totalCost: Math.round(newQty * (item.unitCost || 0) * 100) / 100
-        };
-      }
-      return item;
-    }));
+    setRestockItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id === itemId || item.product.id === trackingKey) {
+          return {
+            ...item,
+            orderQuantity: newQty,
+            totalCost: Math.round(newQty * (item.unitCost || 0) * 100) / 100
+          };
+        }
+        return item;
+      });
+      saveRestockItems(updated);
+      return updated;
+    });
 
-    if (dbStatus.connected) {
-      const existingTimer = debounceTimersRef.current.get(itemId);
-      if (existingTimer) {
-        clearTimeout(existingTimer);
-      }
+    const existingTimer = debounceTimersRef.current.get(trackingKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
 
-      const timer = setTimeout(async () => {
-        try {
-          await api.updateQuantity(
-            itemId, 
-            newQty, 
-            targetItem?.product?.id, 
+    const timer = setTimeout(async () => {
+      try {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const ok = await api.updateQuantity(
+            targetItem?.id || itemId,
+            newQty,
+            targetItem?.product?.id,
             targetItem?.product?.barcode,
             targetItem?.note
           );
-        } catch (err) {
-          console.error('Failed to sync quantity to DB:', err);
-        } finally {
-          debounceTimersRef.current.delete(itemId);
-          pendingUpdatesRef.current.delete(itemId);
+          if (!ok) throw new Error('PUT restock returned error');
+          removeOfflineDirtyOp(trackingKey);
+        } else if (updatedItemForOffline) {
+          upsertOfflineDirtyOp({
+            type: 'upsert',
+            productId: trackingKey,
+            barcode: targetItem?.product?.barcode,
+            item: updatedItemForOffline,
+            timestamp: Date.now()
+          });
         }
-      }, 350);
+      } catch (err) {
+        console.error('Failed to sync quantity to DB:', err);
+        if (updatedItemForOffline) {
+          upsertOfflineDirtyOp({
+            type: 'upsert',
+            productId: trackingKey,
+            barcode: targetItem?.product?.barcode,
+            item: updatedItemForOffline,
+            timestamp: Date.now()
+          });
+        }
+      } finally {
+        debounceTimersRef.current.delete(trackingKey);
+        // Only delete pending marker if it still holds the value this request synced
+        if (pendingUpdatesRef.current.get(trackingKey) === newQty) {
+          pendingUpdatesRef.current.delete(trackingKey);
+        }
+      }
+    }, 250);
 
-      debounceTimersRef.current.set(itemId, timer);
+    debounceTimersRef.current.set(trackingKey, timer);
+  }, []);
+
+  // Remove single item (persisted reliably without resurrection across refresh or cross-device sync)
+  const handleRemoveItem = useCallback(async (itemId: string) => {
+    const targetItem = restockItemsRef.current.find(i => i.id === itemId || i.product.id === itemId);
+    const trackingKey = targetItem?.product?.id || itemId;
+
+    if (debounceTimersRef.current.has(trackingKey)) {
+      clearTimeout(debounceTimersRef.current.get(trackingKey)!);
+      debounceTimersRef.current.delete(trackingKey);
     }
-  };
-
-  // Track explicitly deleted item IDs to prevent resurrection from localStorage merge
-  const deletedItemIdsRef = useRef<Set<string>>(new Set());
-
-  // Remove single item
-  const handleRemoveItem = async (itemId: string) => {
-    // Clear pending debounce timer if user removes item
     if (debounceTimersRef.current.has(itemId)) {
       clearTimeout(debounceTimersRef.current.get(itemId)!);
       debounceTimersRef.current.delete(itemId);
     }
+    pendingUpdatesRef.current.delete(trackingKey);
     pendingUpdatesRef.current.delete(itemId);
+    inFlightScansRef.current.delete(trackingKey);
 
-    const targetItem = restockItems.find(i => i.id === itemId || i.product.id === itemId);
-
-    // Track deleted IDs to block localStorage resurrection
-    deletedItemIdsRef.current.add(itemId);
-    if (targetItem?.product?.id) deletedItemIdsRef.current.add(targetItem.product.id);
+    const deleteTs = Date.now();
+    inFlightDeletesRef.current.set(trackingKey, deleteTs);
+    inFlightDeletesRef.current.set(itemId, deleteTs);
 
     setRestockItems(prev => {
-      const updated = prev.filter(i => i.id !== itemId && i.product.id !== itemId);
-      saveRestockItems(updated); // ← CRITICAL: persist to localStorage immediately
+      const updated = prev.filter(i => i.id !== itemId && i.product.id !== trackingKey);
+      saveRestockItems(updated);
       return updated;
     });
     showToast('បានលុបទំនិញចេញពីតារាង', 'info');
 
-    if (dbStatus.connected) {
-      try {
-        await api.deleteRestockItem(itemId, targetItem?.product?.id, targetItem?.product?.barcode);
-      } catch (err) {
-        console.error('Failed to delete item from DB:', err);
-        showToast('លុបក្នុង DB មានបញ្ហា សូមព្យាយាមម្តងទៀត', 'error');
+    try {
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        const ok = await api.deleteRestockItem(
+          targetItem?.id || itemId,
+          targetItem?.product?.id,
+          targetItem?.product?.barcode
+        );
+        if (!ok) throw new Error('Delete returned non-OK');
+        removeOfflineDirtyOp(trackingKey);
+      } else {
+        upsertOfflineDirtyOp({
+          type: 'delete',
+          productId: trackingKey,
+          barcode: targetItem?.product?.barcode,
+          timestamp: Date.now()
+        });
       }
+    } catch (err) {
+      console.error('Failed to delete item from DB:', err);
+      upsertOfflineDirtyOp({
+        type: 'delete',
+        productId: trackingKey,
+        barcode: targetItem?.product?.barcode,
+        timestamp: Date.now()
+      });
+      showToast('លុបក្នុង DB មានបញ្ហា — នឹងព្យាយាមម្តងទៀតស្វ័យប្រវត្តិ', 'error');
     }
-  };
+  }, [showToast]);
 
   // Clear all items with beautiful custom modal
   const handleClearAll = () => {
@@ -470,16 +645,23 @@ export const App: React.FC = () => {
       confirmButtonColor: 'bg-rose-600 hover:bg-rose-700 text-white',
       onConfirm: async () => {
         setAppConfirm(prev => ({ ...prev, isOpen: false }));
-        // Clear all active timers to prevent pending debounced updates from resurrecting cleared items
         debounceTimersRef.current.forEach(timer => clearTimeout(timer));
         debounceTimersRef.current.clear();
         pendingUpdatesRef.current.clear();
+        inFlightScansRef.current.clear();
+        clearOfflineDirtyOps();
+
+        const ts = Date.now();
+        restockItemsRef.current.forEach(item => {
+          inFlightDeletesRef.current.set(item.id, ts);
+          if (item.product?.id) inFlightDeletesRef.current.set(item.product.id, ts);
+        });
 
         setRestockItems([]);
         saveRestockItems([]);
         showToast('បានសម្អាតតារាងបញ្ជាទិញរួចរាល់', 'info');
 
-        if (dbStatus.connected) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           try {
             await api.clearRestockItems();
           } catch (err) {
@@ -494,15 +676,16 @@ export const App: React.FC = () => {
   const handleSaveNewProduct = async (newProduct: Product, addToOrderNow: boolean): Promise<boolean> => {
     let savedProd = newProduct;
 
-    if (dbStatus.connected) {
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) {
       try {
         savedProd = await api.createProduct(newProduct);
+        setDbStatus(prev => (prev.connected ? prev : { ...prev, connected: true }));
       } catch (err: any) {
         showToast(`បរាជ័យក្នុងការរក្សាទុកក្នុង DB: ${err.message}`, 'error');
         return false; // Halt if DB rejected (e.g. duplicate barcode)
       }
     } else {
-      const existsLocally = products.some(p => p.barcode.toLowerCase() === newProduct.barcode.toLowerCase());
+      const existsLocally = findProductInCatalog(productsRef.current, newProduct.barcode);
       if (existsLocally) {
         showToast(`Barcode "${newProduct.barcode}" មានរួចហើយក្នុងប្រព័ន្ធ!`, 'error');
         return false;
@@ -514,8 +697,12 @@ export const App: React.FC = () => {
 
     if (addToOrderNow) {
       sound.playSuccessBeep();
+      inFlightDeletesRef.current.delete(savedProd.id);
+      removeOfflineDirtyOp(savedProd.id);
+
+      const tempId = `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newItem: RestockItem = {
-        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: tempId,
         product: savedProd,
         orderQuantity: 0,
         scannedAt: new Date().toISOString(),
@@ -523,18 +710,31 @@ export const App: React.FC = () => {
         totalCost: 0
       };
 
+      inFlightScansRef.current.set(savedProd.id, newItem);
       setRestockItems(prev => {
         const exists = prev.some(i => i.product.id === savedProd.id || i.product.barcode.toLowerCase() === savedProd.barcode.toLowerCase());
         if (exists) return prev;
-        return [newItem, ...prev];
+        const updated = [newItem, ...prev];
+        saveRestockItems(updated);
+        return updated;
       });
 
-      setHighlightedItemId(newItem.id);
-      setTimeout(() => setHighlightedItemId(null), 2500);
+      highlightItemTemporarily(tempId);
 
-      // Async sync to DB if connected
-      if (dbStatus.connected) {
-        api.scanBarcode(savedProd.barcode).catch(err => console.warn('Sync scan failed:', err));
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        api.scanBarcode(savedProd.barcode)
+          .then(res => {
+            inFlightScansRef.current.delete(savedProd.id);
+            if (res.found && res.item) {
+              setRestockItems(prev => prev.map(i => (
+                i.id === tempId || i.product.id === savedProd.id ? { ...res.item!, orderQuantity: i.orderQuantity || res.item!.orderQuantity } : i
+              )));
+            }
+          })
+          .catch(err => {
+            inFlightScansRef.current.delete(savedProd.id);
+            console.warn('Sync scan failed:', err);
+          });
       }
     }
     return true;
@@ -542,19 +742,27 @@ export const App: React.FC = () => {
 
   // Delete product from catalog
   const handleDeleteProduct = async (productId: string) => {
-    // Clear any pending debounce timers for restock items matching this product
-    restockItems.forEach(i => {
+    if (debounceTimersRef.current.has(productId)) {
+      clearTimeout(debounceTimersRef.current.get(productId)!);
+      debounceTimersRef.current.delete(productId);
+    }
+    pendingUpdatesRef.current.delete(productId);
+    inFlightScansRef.current.delete(productId);
+    inFlightDeletesRef.current.set(productId, Date.now());
+    removeOfflineDirtyOp(productId);
+
+    restockItemsRef.current.forEach(i => {
       if (i.product.id === productId || i.id === productId) {
         if (debounceTimersRef.current.has(i.id)) {
           clearTimeout(debounceTimersRef.current.get(i.id)!);
           debounceTimersRef.current.delete(i.id);
         }
         pendingUpdatesRef.current.delete(i.id);
-        pendingUpdatesRef.current.delete(productId);
+        inFlightDeletesRef.current.set(i.id, Date.now());
       }
     });
 
-    const target = products.find(p => p.id === productId);
+    const target = productsRef.current.find(p => p.id === productId);
     const prodName = target ? target.name : '';
 
     setProducts(prev => {
@@ -563,14 +771,13 @@ export const App: React.FC = () => {
       return updated;
     });
 
-    // Also remove from active restock items if present
     setRestockItems(prev => {
       const updated = prev.filter(i => i.product.id !== productId);
       saveRestockItems(updated);
       return updated;
     });
 
-    if (dbStatus.connected) {
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) {
       try {
         await api.deleteProduct(productId);
       } catch (err: any) {
@@ -581,7 +788,7 @@ export const App: React.FC = () => {
     showToast(`បានលុបទំនិញ ${prodName ? `«${prodName}»` : ''} ចេញពី Catalog រួចរាល់`, 'info');
   };
 
-  // Reset to initial demo catalog with custom modal
+  // Refresh data from Neon PostgreSQL with custom modal
   const handleResetDemoData = () => {
     setAppConfirm({
       isOpen: true,
@@ -594,8 +801,7 @@ export const App: React.FC = () => {
       confirmButtonColor: 'bg-blue-600 hover:bg-blue-700 text-white',
       onConfirm: () => {
         setAppConfirm(prev => ({ ...prev, isOpen: false }));
-        loadDataFromDatabase();
-        showToast('បាន Refresh ទិន្នន័យឡើងវិញ', 'info');
+        loadDataFromDatabase(true);
       }
     });
   };
@@ -680,13 +886,26 @@ export const App: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 hidden sm:inline">
-              ស្កេនបានទាំងកាំភ្លើង USB/Bluetooth និងកាមេរ៉ាទូរស័ព្ទ
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                dbStatus.connected
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}
+              title={dbStatus.connected ? 'ភ្ជាប់ Neon DB & Sync Real-Time រួចរាល់' : 'កំពុងប្រើទិន្នន័យ Offline'}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  dbStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+              />
+              <Database className="w-3 h-3" />
+              <span className="hidden xs:inline">{dbStatus.connected ? 'Live Sync' : 'Offline'}</span>
             </span>
             <button
-              onClick={loadDataFromDatabase}
+              onClick={() => loadDataFromDatabase(true)}
               title="ទាញយកទិន្នន័យឡើងវិញ (Refresh Data)"
-              className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition"
+              className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition active:scale-95"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>

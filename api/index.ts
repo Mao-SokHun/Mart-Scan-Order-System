@@ -308,6 +308,14 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Prevent browsers/proxies (especially mobile Safari) from caching dynamic API data
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // Helper to safely parse floating point numbers
 const safeFloat = (val: any, fallback = 0): number => {
   if (val === null || val === undefined) return fallback;
@@ -424,7 +432,7 @@ app.get('/api/products', async (req: Request, res: Response) => {
   }
 });
 
-// 3. GET product by barcode
+// 3. GET product by barcode (case-insensitive trimmed + numeric UPC-A/EAN-13 leading-zero fallback)
 app.get('/api/products/barcode/:barcode', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.params;
@@ -433,7 +441,14 @@ app.get('/api/products/barcode/:barcode', async (req: Request, res: Response) =>
     if (!cleanBarcode) {
       return res.status(400).json({ error: 'Barcode is required' });
     }
-    const result = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    let result = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    if (result.rows.length === 0 && /^\d{12,13}$/.test(cleanBarcode)) {
+      const stripped = cleanBarcode.replace(/^0+/, '');
+      result = await pool.query(
+        "SELECT * FROM products WHERE LTRIM(TRIM(barcode), '0') = $1 AND TRIM(barcode) ~ '^[0-9]+$' LIMIT 1;",
+        [stripped]
+      );
+    }
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found', barcode: cleanBarcode });
     }
@@ -568,7 +583,7 @@ app.delete('/api/products/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 7. POST /api/products/batch - Bulk catalog import
+// 7. POST /api/products/batch - High-speed bulk catalog import (chunks multi-row UPSERT)
 app.post('/api/products/batch', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
@@ -577,29 +592,79 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Array of products is required' });
     }
 
-    await client.query('BEGIN');
-    let insertedCount = 0;
+    // Deduplicate incoming items cleanly by normalized barcode
+    const dedupMap = new Map<string, any>();
     for (const p of items) {
       if (!p) continue;
       let cleanBarcode = String(p.barcode || '').trim();
       if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
-      let cleanName = String(p.name || '').trim();
+      const cleanName = String(p.name || '').trim();
       if (!cleanBarcode || !cleanName) continue;
+      dedupMap.set(cleanBarcode.toLowerCase(), { ...p, barcode: cleanBarcode, name: cleanName });
+    }
 
-      // Check for existing product by case-insensitive barcode to ensure exact conflict target
-      const existing = await client.query(
-        'SELECT id, barcode FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;',
-        [cleanBarcode]
-      );
-      const targetBarcode = existing.rows.length > 0 ? existing.rows[0].barcode : cleanBarcode;
-      const id = existing.rows.length > 0 ? existing.rows[0].id : (p.id || `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+    const cleanItems = Array.from(dedupMap.values());
+    if (cleanItems.length === 0) {
+      return res.status(400).json({ error: 'No valid products found in batch' });
+    }
 
-      await client.query(`
+    await client.query('BEGIN');
+
+    // Single lookup for existing barcodes (case-insensitive) to preserve canonical case & IDs
+    const existingRes = await client.query(
+      'SELECT id, barcode FROM products WHERE LOWER(TRIM(barcode)) = ANY($1);',
+      [cleanItems.map(p => p.barcode.toLowerCase())]
+    );
+    const existingMap = new Map<string, { id: string; barcode: string }>();
+    for (const row of existingRes.rows) {
+      existingMap.set(String(row.barcode).trim().toLowerCase(), { id: row.id, barcode: row.barcode });
+    }
+
+    const CHUNK_SIZE = 100;
+    let insertedCount = 0;
+
+    for (let start = 0; start < cleanItems.length; start += CHUNK_SIZE) {
+      const chunk = cleanItems.slice(start, start + CHUNK_SIZE);
+      const values: any[] = [];
+      const placeholders: string[] = [];
+
+      chunk.forEach((p, idx) => {
+        const match = existingMap.get(p.barcode.toLowerCase());
+        const targetBarcode = match ? match.barcode : p.barcode;
+        const id = match
+          ? match.id
+          : (p.id || `p-${Date.now()}-${start + idx}-${Math.random().toString(36).substring(2, 6)}`);
+
+        const base = idx * 15;
+        placeholders.push(
+          `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15})`
+        );
+        values.push(
+          id,
+          targetBarcode,
+          p.name,
+          p.khmerName ? String(p.khmerName).trim() : null,
+          p.category ? String(p.category).trim() : 'ផ្សេងៗ (Other)',
+          p.unit ? String(p.unit).trim() : 'កំប៉ុង',
+          roundMoney(Math.max(0, safeFloat(p.costPrice, 0))),
+          roundMoney(Math.max(0, safeFloat(p.sellingPrice, 0))),
+          Math.max(0, safeInt(p.currentStock, 0)),
+          Math.max(0, safeInt(p.minStock, 10)),
+          p.supplierName ? String(p.supplierName).trim() : 'ទូទៅ (General Supplier)',
+          p.supplierPhone ? String(p.supplierPhone).trim() : null,
+          p.image || null,
+          p.remark ? String(p.remark).trim() : null,
+          p.storageTemp ? String(p.storageTemp).trim() : null
+        );
+      });
+
+      await client.query(
+        `
         INSERT INTO products (
           id, barcode, name, khmer_name, category, unit,
           cost_price, selling_price, current_stock, min_stock,
           supplier_name, supplier_phone, image, remark, storage_temp
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ) VALUES ${placeholders.join(', ')}
         ON CONFLICT (barcode) DO UPDATE SET
           name = EXCLUDED.name,
           khmer_name = COALESCE(EXCLUDED.khmer_name, products.khmer_name),
@@ -615,16 +680,12 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
           remark = COALESCE(EXCLUDED.remark, products.remark),
           storage_temp = COALESCE(EXCLUDED.storage_temp, products.storage_temp),
           updated_at = CURRENT_TIMESTAMP;
-      `, [
-        id, targetBarcode, String(p.name).trim(), p.khmerName ? String(p.khmerName).trim() : null,
-        p.category ? String(p.category).trim() : 'ផ្សេងៗ (Other)', p.unit ? String(p.unit).trim() : 'កំប៉ុង',
-        Math.max(0, safeFloat(p.costPrice, 0)), Math.max(0, safeFloat(p.sellingPrice, 0)),
-        Math.max(0, safeInt(p.currentStock, 0)), Math.max(0, safeInt(p.minStock, 10)),
-        p.supplierName ? String(p.supplierName).trim() : 'ទូទៅ (General Supplier)', p.supplierPhone ? String(p.supplierPhone).trim() : null,
-        p.image || null, p.remark ? String(p.remark).trim() : null, p.storageTemp ? String(p.storageTemp).trim() : null
-      ]);
-      insertedCount++;
+      `,
+        values
+      );
+      insertedCount += chunk.length;
     }
+
     await client.query('COMMIT');
     res.json({ success: true, count: insertedCount });
   } catch (err: any) {
@@ -646,7 +707,7 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
         p.supplier_name, p.supplier_phone, p.remark, p.storage_temp, p.image, p.created_at, p.updated_at
       FROM restock_items r
       JOIN products p ON r.product_id = p.id
-      ORDER BY r.scanned_at DESC;
+      ORDER BY r.scanned_at DESC, r.id ASC;
     `;
     const result = await pool.query(query);
     res.json(result.rows.map(mapRestockItem));
@@ -666,8 +727,15 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Barcode is required and cannot be empty' });
     }
 
-    // 1. Find product (case-insensitive for barcode matching)
-    const prodRes = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    // 1. Find product (case-insensitive trimmed + leading-zero UPC-A/EAN-13 fallback)
+    let prodRes = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
+    if (prodRes.rows.length === 0 && /^\d{12,13}$/.test(cleanBarcode)) {
+      const stripped = cleanBarcode.replace(/^0+/, '');
+      prodRes = await pool.query(
+        "SELECT * FROM products WHERE LTRIM(TRIM(barcode), '0') = $1 AND TRIM(barcode) ~ '^[0-9]+$' LIMIT 1;",
+        [stripped]
+      );
+    }
     if (prodRes.rows.length === 0) {
       return res.status(404).json({ found: false, barcode: cleanBarcode, message: 'Barcode not found in catalog' });
     }
@@ -861,7 +929,7 @@ app.post('/api/restock/batch', async (req: Request, res: Response) => {
         p.supplier_name, p.supplier_phone, p.remark, p.storage_temp, p.image, p.created_at, p.updated_at
       FROM restock_items r
       JOIN products p ON r.product_id = p.id
-      ORDER BY r.scanned_at DESC;
+      ORDER BY r.scanned_at DESC, r.id ASC;
     `);
 
     res.json({ success: true, count: syncedCount, items: allRes.rows.map(mapRestockItem) });

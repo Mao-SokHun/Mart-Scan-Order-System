@@ -49,6 +49,11 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
   const BOT_USERNAME = 'Digital_Invitation_Link_bot';
   const BOT_LINK = `https://t.me/${BOT_USERNAME}`;
 
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+  const isSendingRef = React.useRef(isSending);
+  isSendingRef.current = isSending;
+
   // Filter items by supplier
   const filteredItems = supplierFilter && supplierFilter !== 'all'
     ? items.filter(i => (i.product?.supplierName || 'ទូទៅ (General Supplier)').trim() === supplierFilter.trim())
@@ -56,41 +61,40 @@ export const TelegramSendModal: React.FC<TelegramSendModalProps> = ({
 
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
 
-  // Load saved Username on modal open
+  // Initialize modal state strictly when opened (never reset banners when isSending toggles or parent re-renders)
   useEffect(() => {
-    if (isOpen) {
-      setSendSuccess(false);
-      setErrorMessage(null);
+    if (!isOpen) return;
 
-      const savedUser = localStorage.getItem('mart_telegram_username');
-      const savedId = localStorage.getItem('mart_scan_telegram_chat_id');
+    setSendSuccess(false);
+    setErrorMessage(null);
 
-      if (savedUser) {
-        setUsernameInput(savedUser);
-      } else if (savedId) {
-        setUsernameInput(savedId);
-      }
-      if (savedId) {
-        setChatId(savedId);
-      } else {
-        api.getTelegramSettings()
-          .then(settings => {
-            if (settings.chatId) {
-              setChatId(settings.chatId);
-              localStorage.setItem('mart_scan_telegram_chat_id', settings.chatId);
-            }
-          })
-          .catch(() => {});
-      }
+    const savedUser = localStorage.getItem('mart_telegram_username');
+    const savedId = localStorage.getItem('mart_scan_telegram_chat_id');
 
-      // Handle Escape key
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && !isSending) onClose();
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+    if (savedUser) {
+      setUsernameInput(savedUser);
+    } else if (savedId) {
+      setUsernameInput(savedId);
     }
-  }, [isOpen, onClose, isSending]);
+    if (savedId) {
+      setChatId(savedId);
+    } else {
+      api.getTelegramSettings()
+        .then(settings => {
+          if (settings.chatId) {
+            setChatId(settings.chatId);
+            localStorage.setItem('mart_scan_telegram_chat_id', settings.chatId);
+          }
+        })
+        .catch(() => {});
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSendingRef.current) onCloseRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

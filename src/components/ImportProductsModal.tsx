@@ -449,7 +449,7 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     return { merged: localMerged, count };
   };
 
-  // Submit selected parsed products to backend API
+  // Submit selected parsed products to backend API in safe chunks
   const handleImportSubmit = async () => {
     if (rowsToImport.length === 0) return;
     setIsSubmitting(true);
@@ -472,21 +472,28 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
         storageTemp: r.storageTemp
       }));
 
-      const res = await fetch('/api/products/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: payload })
-      });
+      // Send in chunks of 250 items to stay comfortably below Vercel serverless body & timeout limits
+      const CHUNK_SIZE = 250;
+      let totalSynced = 0;
+      for (let i = 0; i < payload.length; i += CHUNK_SIZE) {
+        const chunk = payload.slice(i, i + CHUNK_SIZE);
+        const res = await fetch('/api/products/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products: chunk })
+        });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to import products to database');
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to import products to database');
+        }
+        const data = await res.json();
+        totalSynced += Number(data.count || chunk.length);
       }
 
-      const data = await res.json();
-      setSuccessCount(data.count || rowsToImport.length);
+      setSuccessCount(totalSynced || rowsToImport.length);
 
-      // Re-fetch all products to update local state
+      // Re-fetch all products to update local state from authoritative DB
       const prodsRes = await fetch('/api/products');
       if (prodsRes.ok) {
         const updatedList: Product[] = await prodsRes.json();
@@ -498,15 +505,19 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
         onImportSuccess(merged);
       }
     } catch (err: any) {
-      console.warn('Backend batch import failed or offline, falling back to LocalStorage:', err);
-      try {
-        const { merged, count } = buildMergedList();
-        saveProducts(merged);
-        onImportSuccess(merged);
-        setSuccessCount(count);
-      } catch (fallbackErr: any) {
-        console.error('Offline import fallback error:', fallbackErr);
-        setErrorMsg(`បរាជ័យក្នុងការ Import: ${err.message || fallbackErr.message}`);
+      console.warn('Backend batch import failed:', err);
+      // Only silently cache to LocalStorage when genuinely offline
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        try {
+          const { merged, count } = buildMergedList();
+          saveProducts(merged);
+          onImportSuccess(merged);
+          setSuccessCount(count);
+        } catch (fallbackErr: any) {
+          setErrorMsg(`បរាជ័យក្នុងការ Import: ${err.message || fallbackErr.message}`);
+        }
+      } else {
+        setErrorMsg(`មិនអាចរក្សាទុកចូល Database បានទេ: ${err.message}`);
       }
     } finally {
       setIsSubmitting(false);

@@ -105,8 +105,10 @@ export const useBarcodeGun = ({
           }
         } else {
           // bufferRef is currently empty. Check if this keystroke is the second character of a scanner burst!
+          // Inside a normal text/number input, require stricter machine speed (<45ms) so fast human typing is never stolen
+          const burstThreshold = (isInput && !isBarcodeSpecificInput) ? Math.min(maxDelayMs, 45) : maxDelayMs;
           const timeSincePrev = currentTime - lastKeystrokeTimeRef.current;
-          if (timeSincePrev <= maxDelayMs && lastKeystrokeCharRef.current) {
+          if (timeSincePrev <= burstThreshold && lastKeystrokeCharRef.current) {
             // Machine speed burst detected!
             bufferRef.current = lastKeystrokeCharRef.current + e.key;
             setIsReceivingGunInput(true);

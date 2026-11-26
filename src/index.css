@@ -9,7 +9,8 @@
   }
 }
 
-/* Ensure Camera Video fits perfectly across iOS & Android */
+/* Ensure Camera Video keeps its exact natural 1:1 camera aspect ratio across iOS & Android
+   (stretching video height breaks html5-qrcode's canvas crop ratios and blurs 1D barcodes!) */
 #camera-barcode-reader {
   width: 100% !important;
   height: 100% !important;
@@ -23,9 +24,11 @@
 }
 
 #camera-barcode-reader video {
+  max-width: 100% !important;
+  max-height: 100% !important;
   width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
+  height: auto !important;
+  object-fit: contain !important;
   border-radius: 0 !important;
 }
 

@@ -4,8 +4,17 @@ import { INITIAL_PRODUCTS } from '../data/mockProducts';
 const STORAGE_KEYS = {
   PRODUCTS: 'mart_scan_products_v1',
   RESTOCK_ITEMS: 'mart_scan_restock_v1',
+  OFFLINE_DIRTY: 'mart_scan_offline_dirty_v1',
   SETTINGS: 'mart_scan_settings_v1',
 };
+
+export interface OfflineDirtyOp {
+  type: 'upsert' | 'delete';
+  productId: string;
+  barcode?: string;
+  item?: RestockItem;
+  timestamp: number;
+}
 
 export const getStoredProducts = (): Product[] => {
   try {
@@ -19,7 +28,6 @@ export const getStoredProducts = (): Product[] => {
   } catch (e) {
     console.error('Error reading products from storage:', e);
   }
-  // Default to mock data
   saveProducts(INITIAL_PRODUCTS);
   return INITIAL_PRODUCTS;
 };
@@ -61,5 +69,47 @@ export const saveRestockItems = (items: RestockItem[]) => {
     localStorage.setItem(STORAGE_KEYS.RESTOCK_ITEMS, JSON.stringify(items));
   } catch (e) {
     console.error('Error saving restock items:', e);
+  }
+};
+
+export const getOfflineDirtyOps = (): OfflineDirtyOp[] => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.OFFLINE_DIRTY);
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading offline dirty queue:', e);
+  }
+  return [];
+};
+
+export const upsertOfflineDirtyOp = (op: OfflineDirtyOp) => {
+  try {
+    const ops = getOfflineDirtyOps().filter(o => o.productId !== op.productId);
+    ops.push(op);
+    localStorage.setItem(STORAGE_KEYS.OFFLINE_DIRTY, JSON.stringify(ops));
+  } catch (e) {
+    console.warn('Error saving offline dirty op:', e);
+  }
+};
+
+export const removeOfflineDirtyOp = (productId: string) => {
+  try {
+    const ops = getOfflineDirtyOps().filter(o => o.productId !== productId);
+    localStorage.setItem(STORAGE_KEYS.OFFLINE_DIRTY, JSON.stringify(ops));
+  } catch (e) {
+    console.warn('Error removing offline dirty op:', e);
+  }
+};
+
+export const clearOfflineDirtyOps = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.OFFLINE_DIRTY);
+  } catch (e) {
+    console.warn('Error clearing offline dirty ops:', e);
   }
 };

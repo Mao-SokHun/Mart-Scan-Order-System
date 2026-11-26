@@ -251,9 +251,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   };
 
   return (
-    <div id="restock-order-table-container" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col mb-12 sm:mb-6 scroll-mt-20">
+    <div id="restock-order-table-container" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-visible flex flex-col mb-12 sm:mb-6 scroll-mt-20">
       {/* Table Header Controls */}
-      <div className="p-3.5 sm:p-5 border-b border-slate-200/80 bg-slate-50/60">
+      <div className="p-3.5 sm:p-5 border-b border-slate-200/80 bg-slate-50/60 rounded-t-2xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
           <div>
             <div className="flex items-center gap-2">

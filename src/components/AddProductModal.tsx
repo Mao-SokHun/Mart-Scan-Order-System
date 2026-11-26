@@ -67,18 +67,21 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     { value: 'Frozen', label: 'Frozen (កក)' },
   ], []);
 
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (isOpen) {
       setBarcode(initialBarcode || '');
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onClose();
+        if (e.key === 'Escape') onCloseRef.current();
       };
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     } else {
       resetForm();
     }
-  }, [isOpen, initialBarcode, onClose]);
+  }, [isOpen, initialBarcode]);
 
   if (!isOpen) return null;
 

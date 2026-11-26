@@ -29,6 +29,10 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [visibleLimit, setVisibleLimit] = useState(100);
+
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
 
   const categories = useMemo(() => 
     Array.from(new Set(products.map(p => (p.category || 'ផ្សេងៗ (Other)').trim()))).filter(Boolean),
@@ -47,13 +51,17 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   }, [categories, products]);
 
   React.useEffect(() => {
+    setVisibleLimit(100);
+  }, [searchQuery, selectedCategory, isOpen]);
+
+  React.useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !productToDelete) onCloseRef.current();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, productToDelete]);
 
   if (!isOpen) return null;
 
@@ -162,7 +170,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
 
             <button
               onClick={onResetDemoData}
-              title="កំណត់ទិន្នន័យគំរូដើមឡើងវិញ"
+              title="ទាញយកទិន្នន័យចុងក្រោយពី Database"
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition shrink-0 active:scale-95"
             >
               <RefreshCw className="w-4 h-4" />
@@ -177,7 +185,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
               រកមិនឃើញទំនិញទេ
             </div>
           ) : (
-            filtered.map((prod) => {
+            filtered.slice(0, visibleLimit).map((prod) => {
               const isAdded = recentlyAddedId === prod.id;
               const isOutOfStock = prod.currentStock <= 0;
               return (
@@ -270,6 +278,17 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
                 </div>
               );
             })
+          )}
+          {filtered.length > visibleLimit && (
+            <div className="col-span-full pt-2 pb-1 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleLimit(prev => prev + 100)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 rounded-xl text-xs font-bold transition active:scale-95"
+              >
+                បង្ហាញបន្ថែម ({filtered.length - visibleLimit} មុខទៀត)
+              </button>
+            </div>
           )}
         </div>
       </div>
