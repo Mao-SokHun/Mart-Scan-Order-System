@@ -497,6 +497,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
           });
         }
       } finally {
+        setIsStarting(false);
         isStartingRef.current = false;
       }
     },

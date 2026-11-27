@@ -469,7 +469,7 @@ app.post('/api/products', async (req: Request, res: Response) => {
       supplierName, supplierPhone, image, remark, storageTemp
     } = req.body || {};
 
-    let cleanBarcode = String(barcode || '').trim();
+    let cleanBarcode = String(barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     const cleanName = String(name || '').trim();
 
@@ -598,7 +598,7 @@ app.post('/api/products/batch', async (req: Request, res: Response) => {
     const dedupMap = new Map<string, any>();
     for (const p of items) {
       if (!p) continue;
-      let cleanBarcode = String(p.barcode || '').trim();
+      let cleanBarcode = String(p.barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
       if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
       const cleanName = String(p.name || '').trim();
       if (!cleanBarcode || !cleanName) continue;
@@ -788,9 +788,11 @@ app.post('/api/restock/scan', async (req: Request, res: Response) => {
       RETURNING id;
     `, [newId, prod.id, prod.barcode, defaultQty, costPrice, totalCost]);
 
-    const finalId = insertRes.rows.length > 0 ? insertRes.rows[0].id : (
-      (await pool.query('SELECT id FROM restock_items WHERE product_id = $1;', [prod.id])).rows[0].id
-    );
+    let finalId = insertRes.rows.length > 0 ? insertRes.rows[0].id : null;
+    if (!finalId) {
+      const fallback = await pool.query('SELECT id FROM restock_items WHERE product_id = $1 LIMIT 1;', [prod.id]);
+      finalId = fallback.rows.length > 0 ? fallback.rows[0].id : newId;
+    }
 
     const isNewlyAdded = insertRes.rows.length > 0;
 
@@ -851,16 +853,18 @@ app.put('/api/restock/:id', async (req: Request, res: Response) => {
         const unitCost = safeFloat(prod.cost_price, 0);
         const totalCost = roundMoney(qty * unitCost);
         const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        await pool.query(`
+        const insertRes = await pool.query(`
           INSERT INTO restock_items (id, product_id, barcode, order_quantity, unit_cost, total_cost, scanned_at, note, status)
           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8)
           ON CONFLICT (product_id) DO UPDATE SET
             order_quantity = EXCLUDED.order_quantity,
             total_cost = EXCLUDED.total_cost,
             note = COALESCE(EXCLUDED.note, restock_items.note),
-            status = COALESCE(EXCLUDED.status, restock_items.status);
+            status = COALESCE(EXCLUDED.status, restock_items.status)
+          RETURNING id;
         `, [newId, prod.id, prod.barcode, qty, unitCost, totalCost, note || null, status || 'pending']);
-        return res.json({ success: true, id: newId, orderQuantity: qty, totalCost, note, status });
+        const settledId = insertRes.rows.length > 0 ? insertRes.rows[0].id : newId;
+        return res.json({ success: true, id: settledId, orderQuantity: qty, totalCost, note, status });
       }
       return res.status(404).json({ error: 'Item not found' });
     }

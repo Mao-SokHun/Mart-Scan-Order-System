@@ -81,6 +81,7 @@ export const App: React.FC = () => {
   // References for debouncing & preventing race conditions (always keyed by immutable product.id)
   const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingUpdatesRef = useRef<Map<string, number>>(new Map());
+  const recentQuantityEditsRef = useRef<Map<string, { qty: number; timestamp: number }>>(new Map());
   const inFlightDeletesRef = useRef<Map<string, number>>(new Map()); // productId -> timestamp
   const inFlightScansRef = useRef<Map<string, RestockItem>>(new Map()); // productId -> optimistic item
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,12 +157,21 @@ export const App: React.FC = () => {
         (pid ? pendingUpdatesRef.current.get(pid) : undefined) ??
         pendingUpdatesRef.current.get(dbItem.id);
 
-      if (pendingQty !== undefined) {
+      const recentEdit = (pid ? recentQuantityEditsRef.current.get(pid) : undefined) ?? recentQuantityEditsRef.current.get(dbItem.id);
+      const isFreshEdit = recentEdit !== undefined && now - recentEdit.timestamp < 3500;
+
+      const effectiveQty = pendingQty !== undefined 
+        ? pendingQty 
+        : isFreshEdit 
+        ? recentEdit.qty 
+        : undefined;
+
+      if (effectiveQty !== undefined) {
         const uc = dbItem.unitCost || 0;
         return {
           ...dbItem,
-          orderQuantity: pendingQty,
-          totalCost: Math.round(pendingQty * uc * 100) / 100
+          orderQuantity: effectiveQty,
+          totalCost: Math.round(effectiveQty * uc * 100) / 100
         };
       }
 
@@ -508,6 +518,10 @@ export const App: React.FC = () => {
 
     // Track active user keystroke by product.id so ID swap from temp->DB never races
     pendingUpdatesRef.current.set(trackingKey, newQty);
+    recentQuantityEditsRef.current.set(trackingKey, { qty: newQty, timestamp: Date.now() });
+    if (itemId !== trackingKey) {
+      recentQuantityEditsRef.current.set(itemId, { qty: newQty, timestamp: Date.now() });
+    }
 
     const updatedItemForOffline: RestockItem | undefined = targetItem
       ? {
@@ -597,6 +611,8 @@ export const App: React.FC = () => {
     }
     pendingUpdatesRef.current.delete(trackingKey);
     pendingUpdatesRef.current.delete(itemId);
+    recentQuantityEditsRef.current.delete(trackingKey);
+    recentQuantityEditsRef.current.delete(itemId);
     inFlightScansRef.current.delete(trackingKey);
 
     const deleteTs = Date.now();
@@ -655,6 +671,7 @@ export const App: React.FC = () => {
         debounceTimersRef.current.forEach(timer => clearTimeout(timer));
         debounceTimersRef.current.clear();
         pendingUpdatesRef.current.clear();
+        recentQuantityEditsRef.current.clear();
         inFlightScansRef.current.clear();
         clearOfflineDirtyOps();
 
