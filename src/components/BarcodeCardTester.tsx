@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
 import { Product } from '../types';
-import { ScanBarcode, Zap, Search, X, Maximize2 } from 'lucide-react';
+import { ScanBarcode, Zap, Search, X, Maximize2, Copy, Check, ChevronDown } from 'lucide-react';
 
 interface BarcodeCardTesterProps {
   products: Product[];
@@ -84,20 +84,39 @@ export const BarcodeCardTester: React.FC<BarcodeCardTesterProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [zoomedProduct, setZoomedProduct] = useState<Product | null>(null);
+  const [visibleLimit, setVisibleLimit] = useState(16);
+  const [copiedBarcode, setCopiedBarcode] = useState<string | null>(null);
+
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const q = searchTerm.toLowerCase().trim();
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.khmerName && p.khmerName.toLowerCase().includes(q)) ||
+        p.barcode.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q)
+    );
+  }, [products, searchTerm]);
 
   const displayProducts = useMemo(() => {
-    if (!searchTerm.trim()) return products.slice(0, 12);
-    const q = searchTerm.toLowerCase().trim();
-    return products
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.khmerName && p.khmerName.toLowerCase().includes(q)) ||
-          p.barcode.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q)
-      )
-      .slice(0, 16);
-  }, [products, searchTerm]);
+    return filteredProducts.slice(0, visibleLimit);
+  }, [filteredProducts, visibleLimit]);
+
+  const handleCopyBarcode = (e: React.MouseEvent, code: string) => {
+    e.stopPropagation();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code);
+      }
+    } catch {}
+    setCopiedBarcode(code);
+    setTimeout(() => setCopiedBarcode(null), 1200);
+  };
+
+  useEffect(() => {
+    setVisibleLimit(16);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (!zoomedProduct) return;
@@ -217,18 +236,51 @@ export const BarcodeCardTester: React.FC<BarcodeCardTesterProps> = ({
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => onSimulateScan(prod.barcode)}
-                className="mt-1.5 w-full py-1.5 bg-blue-600/30 hover:bg-blue-600 text-blue-200 hover:text-white rounded-xl text-[11px] font-semibold border border-blue-500/40 hover:border-blue-500 flex items-center justify-center gap-1 transition active:scale-95"
-              >
-                <Zap className="w-3 h-3" />
-                <span>តេស្ត Scan</span>
-              </button>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSimulateScan(prod.barcode)}
+                  className="flex-1 py-1.5 bg-blue-600/30 hover:bg-blue-600 text-blue-200 hover:text-white rounded-xl text-[11px] font-semibold border border-blue-500/40 hover:border-blue-500 flex items-center justify-center gap-1 transition active:scale-95"
+                  title="តេស្តស្កេនចូលតារាងផ្ទាល់"
+                >
+                  <Zap className="w-3 h-3" />
+                  <span>តេស្ត Scan</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleCopyBarcode(e, prod.barcode)}
+                  className={`p-1.5 rounded-xl border text-[11px] transition active:scale-95 ${
+                    copiedBarcode === prod.barcode
+                      ? 'bg-emerald-500 text-white border-emerald-400'
+                      : 'bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-600'
+                  }`}
+                  title="ចម្លង Barcode (Copy)"
+                >
+                  {copiedBarcode === prod.barcode ? (
+                    <Check className="w-3.5 h-3.5 text-white" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
+
+      {/* Load More Button if filtered list exceeds visible limit */}
+      {filteredProducts.length > visibleLimit && (
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => setVisibleLimit((prev) => prev + 16)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition active:scale-95 inline-flex items-center gap-1.5 shadow"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+            <span>បង្ហាញបន្ថែម 16 មុខទៀត (នៅសល់ {filteredProducts.length - visibleLimit} មុខ)</span>
+          </button>
+        </div>
+      )}
 
       {/* Full-Screen High-Contrast Zoomed Barcode Lightbox for Phone Scanning */}
       {zoomedProduct && (

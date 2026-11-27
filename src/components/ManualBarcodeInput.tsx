@@ -18,7 +18,7 @@ export const ManualBarcodeInput: React.FC<ManualBarcodeInputProps> = ({
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    let clean = barcodeInput.replace(/[\r\n\t]/g, '').trim();
+    let clean = barcodeInput.replace(/[\x00-\x1F\x7F-\x9F]/g, '').replace(/[\r\n\t]/g, '').trim();
     if (clean.endsWith('.0')) clean = clean.slice(0, -2);
     if (!clean) return;
 

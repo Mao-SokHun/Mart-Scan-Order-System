@@ -89,7 +89,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     e.preventDefault();
     if (!barcode.trim() || !name.trim() || isSubmitting) return;
 
-    let cleanBarcode = barcode.trim();
+    let cleanBarcode = barcode.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
 
     const parsedCost = Math.round(Math.max(0, parseFloat(costPrice) || 0) * 100) / 100;

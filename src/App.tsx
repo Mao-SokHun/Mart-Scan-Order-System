@@ -102,14 +102,21 @@ export const App: React.FC = () => {
     }, 3000);
   }, []);
 
-  // Smart barcode lookup (case-insensitive trimmed + numeric UPC-A/EAN-13 leading-zero fallback)
+  // Smart barcode lookup (case-insensitive trimmed + universal numeric EAN/UPC leading-zero fallback)
   const findProductInCatalog = useCallback((list: Product[], barcode: string): Product | undefined => {
-    const clean = barcode.trim().toLowerCase().replace(/\.0$/, '');
-    const exact = list.find(p => (p.barcode || '').trim().toLowerCase().replace(/\.0$/, '') === clean);
+    const clean = barcode.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim().toLowerCase().replace(/\.0$/, '');
+    if (!clean) return undefined;
+    const exact = list.find(p => (p.barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim().toLowerCase().replace(/\.0$/, '') === clean);
     if (exact) return exact;
-    if (/^\d{12,13}$/.test(clean)) {
-      const stripped = clean.replace(/^0+/, '');
-      return list.find(p => (p.barcode || '').trim().toLowerCase().replace(/^0+/, '') === stripped);
+    // Numeric barcodes (EAN-8, UPC-A, EAN-13, GTIN-14): strip leading zeroes for comparison
+    if (/^\d+$/.test(clean)) {
+      const strippedClean = clean.replace(/^0+/, '');
+      if (strippedClean.length >= 6) {
+        return list.find(p => {
+          const pCode = (p.barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim().toLowerCase().replace(/\.0$/, '');
+          return /^\d+$/.test(pCode) && pCode.replace(/^0+/, '') === strippedClean;
+        });
+      }
     }
     return undefined;
   }, []);
@@ -344,7 +351,7 @@ export const App: React.FC = () => {
 
   // Handle Scanning Barcode (Used by Barcode Gun, Camera Scanner & Manual Input)
   const handleScan = useCallback(async (scannedBarcode: string): Promise<ScanOutcome> => {
-    let cleanBarcode = scannedBarcode.replace(/[\r\n\t]/g, '').trim();
+    let cleanBarcode = scannedBarcode.replace(/[\x00-\x1F\x7F-\x9F]/g, '').replace(/[\r\n\t]/g, '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     if (!cleanBarcode) return 'ignored';
 

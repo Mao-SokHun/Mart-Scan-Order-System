@@ -615,8 +615,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             }}
                             onChange={(e) => {
-                              const val = e.target.value;
-                              onUpdateQuantity(item.id, val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                              const raw = e.target.value.replace(/[^0-9]/g, '');
+                              const num = raw === '' ? 0 : Math.min(99999, parseInt(raw, 10) || 0);
+                              onUpdateQuantity(item.id, num);
                             }}
                             className={`w-16 h-10 text-center text-sm font-extrabold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
                               isZeroQty 
@@ -839,8 +840,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                               }}
                               onChange={(e) => {
-                                const val = e.target.value;
-                                onUpdateQuantity(item.id, val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                const num = raw === '' ? 0 : Math.min(99999, parseInt(raw, 10) || 0);
+                                onUpdateQuantity(item.id, num);
                               }}
                               className="w-16 text-center bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-400"
                             />

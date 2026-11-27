@@ -11,7 +11,12 @@ class SoundEffects {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      try {
+        const p = this.ctx.resume();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {});
+        }
+      } catch {}
     }
     return this.ctx;
   }
@@ -20,11 +25,12 @@ class SoundEffects {
     try {
       const ctx = this.getContext();
       if (ctx && ctx.state === 'suspended') {
-        ctx.resume();
+        const p = ctx.resume();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {});
+        }
       }
-    } catch (e) {
-      // Ignore
-    }
+    } catch {}
   }
 
   playSuccessBeep() {

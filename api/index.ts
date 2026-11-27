@@ -436,18 +436,20 @@ app.get('/api/products', async (req: Request, res: Response) => {
 app.get('/api/products/barcode/:barcode', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.params;
-    let cleanBarcode = String(barcode || '').trim();
+    let cleanBarcode = String(barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     if (!cleanBarcode) {
       return res.status(400).json({ error: 'Barcode is required' });
     }
     let result = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
-    if (result.rows.length === 0 && /^\d{12,13}$/.test(cleanBarcode)) {
+    if (result.rows.length === 0 && /^\d+$/.test(cleanBarcode)) {
       const stripped = cleanBarcode.replace(/^0+/, '');
-      result = await pool.query(
-        "SELECT * FROM products WHERE LTRIM(TRIM(barcode), '0') = $1 AND TRIM(barcode) ~ '^[0-9]+$' LIMIT 1;",
-        [stripped]
-      );
+      if (stripped.length >= 6) {
+        result = await pool.query(
+          "SELECT * FROM products WHERE LTRIM(TRIM(barcode), '0') = $1 AND TRIM(barcode) ~ '^[0-9]+$' LIMIT 1;",
+          [stripped]
+        );
+      }
     }
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found', barcode: cleanBarcode });
@@ -721,20 +723,22 @@ app.get('/api/restock', async (_req: Request, res: Response) => {
 app.post('/api/restock/scan', async (req: Request, res: Response) => {
   try {
     const { barcode } = req.body || {};
-    let cleanBarcode = String(barcode || '').trim();
+    let cleanBarcode = String(barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
     if (!cleanBarcode) {
       return res.status(400).json({ error: 'Barcode is required and cannot be empty' });
     }
 
-    // 1. Find product (case-insensitive trimmed + leading-zero UPC-A/EAN-13 fallback)
+    // 1. Find product (case-insensitive trimmed + universal numeric EAN/UPC leading-zero fallback)
     let prodRes = await pool.query('SELECT * FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) LIMIT 1;', [cleanBarcode]);
-    if (prodRes.rows.length === 0 && /^\d{12,13}$/.test(cleanBarcode)) {
+    if (prodRes.rows.length === 0 && /^\d+$/.test(cleanBarcode)) {
       const stripped = cleanBarcode.replace(/^0+/, '');
-      prodRes = await pool.query(
-        "SELECT * FROM products WHERE LTRIM(TRIM(barcode), '0') = $1 AND TRIM(barcode) ~ '^[0-9]+$' LIMIT 1;",
-        [stripped]
-      );
+      if (stripped.length >= 6) {
+        prodRes = await pool.query(
+          "SELECT * FROM products WHERE LTRIM(TRIM(barcode), '0') = $1 AND TRIM(barcode) ~ '^[0-9]+$' LIMIT 1;",
+          [stripped]
+        );
+      }
     }
     if (prodRes.rows.length === 0) {
       return res.status(404).json({ found: false, barcode: cleanBarcode, message: 'Barcode not found in catalog' });

@@ -97,18 +97,22 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     }));
   }, [cameras]);
 
-  // Match product in local catalog with normalization + UPC-A/EAN-13 leading-zero fallback
+  // Match product in local catalog with normalization + universal numeric EAN/UPC leading-zero fallback
   const findLocalProduct = (code: string): Product | undefined => {
-    const clean = code.trim().toLowerCase().replace(/\.0$/, '');
+    const clean = code.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim().toLowerCase().replace(/\.0$/, '');
+    if (!clean) return undefined;
     const exact = productsRef.current.find(
-      (p) => (p.barcode || '').trim().toLowerCase().replace(/\.0$/, '') === clean
+      (p) => (p.barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim().toLowerCase().replace(/\.0$/, '') === clean
     );
     if (exact) return exact;
-    if (/^\d{12,13}$/.test(clean)) {
-      const stripped = clean.replace(/^0+/, '');
-      return productsRef.current.find(
-        (p) => (p.barcode || '').trim().toLowerCase().replace(/^0+/, '') === stripped
-      );
+    if (/^\d+$/.test(clean)) {
+      const strippedClean = clean.replace(/^0+/, '');
+      if (strippedClean.length >= 6) {
+        return productsRef.current.find((p) => {
+          const pCode = (p.barcode || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim().toLowerCase().replace(/\.0$/, '');
+          return /^\d+$/.test(pCode) && pCode.replace(/^0+/, '') === strippedClean;
+        });
+      }
     }
     return undefined;
   };
@@ -117,7 +121,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const handleBarcodeDecoded = useCallback(async (decodedText: string) => {
     if (!isOpenRef.current) return;
 
-    let cleanCode = String(decodedText || '').replace(/[\r\n\t]/g, '').trim();
+    let cleanCode = String(decodedText || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').replace(/[\r\n\t]/g, '').trim();
     if (cleanCode.endsWith('.0')) cleanCode = cleanCode.slice(0, -2);
     if (!cleanCode || cleanCode.length < 3) return;
 
