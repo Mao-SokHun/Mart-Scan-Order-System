@@ -56,6 +56,19 @@ export const api = {
     return res.json();
   },
 
+  async updateProduct(id: string, product: Partial<Product>): Promise<Product> {
+    const res = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update product');
+    }
+    return res.json();
+  },
+
   async getRestockItems(): Promise<RestockItem[]> {
     const res = await fetch(`${API_BASE_URL}/restock`);
     if (!res.ok) throw new Error('Failed to fetch restock items');

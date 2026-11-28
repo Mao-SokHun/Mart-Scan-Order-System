@@ -333,6 +333,14 @@ const extractStorageTemp = (category: string, prodName?: string, explicitTemp?: 
   return 'Dry';
 };
 
+// Excel Sheet Name Sanitizer (removes illegal characters \ / ? * : [ ] and limits to 31 chars)
+export const sanitizeSheetName = (name: string): string => {
+  return (name || 'Sheet')
+    .replace(/[\\/*?:\[\]]/g, '_')
+    .trim()
+    .slice(0, 31);
+};
+
 // Helper to determine department sheet name
 const extractSheetName = (category: string): string => {
   const cat = (category || '').toLowerCase();
@@ -486,13 +494,13 @@ export const buildDailyPlanWorkbook = (
       const ws = XLSX.utils.json_to_sheet(rowsWithSubtotal, { header: headers });
       ws['!cols'] = colWidths;
       styleDepartmentWorksheet(ws, true);
-      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+      XLSX.utils.book_append_sheet(workbook, ws, sanitizeSheetName(sheetName));
     } else {
       // Keep sheet with headers so all department tabs exist in template
       const ws = XLSX.utils.json_to_sheet([], { header: headers });
       ws['!cols'] = colWidths;
       styleDepartmentWorksheet(ws, false);
-      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+      XLSX.utils.book_append_sheet(workbook, ws, sanitizeSheetName(sheetName));
     }
   }
 

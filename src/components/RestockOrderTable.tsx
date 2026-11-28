@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { RestockItem } from '../types';
+import { RestockItem, Product } from '../types';
 import { OrderDay, getCurrentDayOfWeek } from '../utils/export';
 import { CustomSelect, SelectOption } from './ui/CustomSelect';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { 
   Trash2, Plus, Minus, FileSpreadsheet, Printer, 
   Send, Search, Filter, ShoppingBag, AlertTriangle, 
-  Check, Phone, AlertCircle, Calendar, X 
+  Check, Phone, AlertCircle, Calendar, X, Pencil 
 } from 'lucide-react';
 
 interface RestockOrderTableProps {
@@ -20,6 +20,7 @@ interface RestockOrderTableProps {
   onCopyToTelegram: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void | boolean | Promise<boolean>;
   onOpenTelegramModal?: (itemsToExport: RestockItem[], orderDay: OrderDay, supplierFilter?: string) => void;
   onOpenPrintPO: () => void;
+  onEditProduct?: (product: Product) => void;
 }
 
 export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
@@ -32,7 +33,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   onExportSimplePO,
   onCopyToTelegram,
   onOpenTelegramModal,
-  onOpenPrintPO
+  onOpenPrintPO,
+  onEditProduct
 }) => {
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -106,7 +108,14 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
   });
 
   const totalQty = filteredItems.reduce((acc, curr) => acc + (curr.orderQuantity || 0), 0);
-  const zeroQtyCount = filteredItems.filter(i => i.orderQuantity <= 0).length;
+  const totalZeroQtyCount = useMemo(() => {
+    return items.filter(item => {
+      const itemSupplier = (item.product.supplierName || 'ទូទៅ (General Supplier)').trim();
+      const matchesSupplier = supplierFilter === 'all' || itemSupplier === supplierFilter;
+      return matchesSupplier && (item.orderQuantity || 0) <= 0;
+    }).length;
+  }, [items, supplierFilter]);
+  const zeroQtyCount = totalZeroQtyCount;
 
   // State for beautiful confirm modal (replacing native window.confirm)
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -281,7 +290,7 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               <span className="text-xs sm:text-sm font-bold text-blue-600">{totalQty} ឯកតា</span>
             </div>
 
-            {zeroQtyCount > 0 ? (
+            {(totalZeroQtyCount > 0 || filterZeroOnly) ? (
               <button
                 type="button"
                 onClick={() => setFilterZeroOnly(!filterZeroOnly)}
@@ -296,7 +305,9 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                   <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600" />
                   <span>{filterZeroOnly ? 'កំពុងមើល: ចាំវាយចំនួន' : 'ចាំវាយចំនួន'}</span>
                 </span>
-                <span className="text-xs sm:text-sm font-bold text-amber-950">{zeroQtyCount} មុខ</span>
+                <span className="text-xs sm:text-sm font-bold text-amber-950">
+                  {filterZeroOnly ? `${filteredItems.length} មុខ (ចុចមើលទាំងអស់)` : `${totalZeroQtyCount} មុខ`}
+                </span>
               </button>
             ) : (
               <div className="col-span-2 sm:col-span-1 bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-2xs flex justify-between sm:block items-center">
@@ -569,8 +580,21 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
 
                       {/* Barcode and Stock badges */}
                       <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                        <span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                          {item.product.barcode}
+                        <span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                          <span>{item.product.barcode}</span>
+                          {onEditProduct && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditProduct(item.product);
+                              }}
+                              className="text-slate-400 hover:text-amber-600 p-0.5 rounded transition"
+                              title="កែប្រែ Barcode / ទំនិញ"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                          )}
                         </span>
                         {isOutOfStock ? (
                           <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded-full">
@@ -628,7 +652,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             }}
                             onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9]/g, '');
+                              const normalized = e.target.value.replace(/[០-៩]/g, d => String(d.charCodeAt(0) - 6064));
+                              const raw = normalized.replace(/[^0-9]/g, '');
                               const num = raw === '' ? 0 : Math.min(99999, parseInt(raw, 10) || 0);
                               onUpdateQuantity(item.id, num);
                             }}
@@ -772,8 +797,21 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                               </p>
                             )}
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="font-mono text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200/80">
-                                {item.product.barcode}
+                              <span className="font-mono text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200/80 flex items-center gap-1">
+                                <span>{item.product.barcode}</span>
+                                {onEditProduct && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onEditProduct(item.product);
+                                    }}
+                                    className="text-slate-400 hover:text-amber-600 p-0.5 rounded transition"
+                                    title="កែប្រែ Barcode / ទំនិញ"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
                               </span>
                               <span className="text-[10px] text-slate-400">
                                 ({item.product.unit})
@@ -853,7 +891,8 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
                                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                               }}
                               onChange={(e) => {
-                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                const normalized = e.target.value.replace(/[០-៩]/g, d => String(d.charCodeAt(0) - 6064));
+                                const raw = normalized.replace(/[^0-9]/g, '');
                                 const num = raw === '' ? 0 : Math.min(99999, parseInt(raw, 10) || 0);
                                 onUpdateQuantity(item.id, num);
                               }}

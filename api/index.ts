@@ -516,6 +516,7 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
+      barcode,
       name, khmerName, category, unit,
       costPrice, sellingPrice, currentStock, minStock,
       supplierName, supplierPhone, image, remark, storageTemp
@@ -531,25 +532,46 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
 
     const targetId = existing.rows[0].id;
 
+    let cleanBarcode: string | null = null;
+    if (barcode !== undefined && barcode !== null) {
+      cleanBarcode = String(barcode).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+      if (cleanBarcode.endsWith('.0')) cleanBarcode = cleanBarcode.slice(0, -2);
+      if (!cleanBarcode) {
+        return res.status(400).json({ error: 'Barcode មិនអាចទទេបានទេ' });
+      }
+      // Check if barcode already exists on another product
+      const conflict = await pool.query(
+        'SELECT id, name FROM products WHERE LOWER(TRIM(barcode)) = LOWER($1) AND id != $2 LIMIT 1;',
+        [cleanBarcode, targetId]
+      );
+      if (conflict.rows.length > 0) {
+        return res.status(409).json({
+          error: `Barcode "${cleanBarcode}" ត្រូវ​បាន​ប្រើ​ដោយ​ទំនិញ​ផ្សេង​រួច​ហើយ (${conflict.rows[0].name})`
+        });
+      }
+    }
+
     const result = await pool.query(`
       UPDATE products
-      SET name = COALESCE($1, name),
-          khmer_name = COALESCE($2, khmer_name),
-          category = COALESCE($3, category),
-          unit = COALESCE($4, unit),
-          cost_price = COALESCE($5, cost_price),
-          selling_price = COALESCE($6, selling_price),
-          current_stock = COALESCE($7, current_stock),
-          min_stock = COALESCE($8, min_stock),
-          supplier_name = COALESCE($9, supplier_name),
-          supplier_phone = COALESCE($10, supplier_phone),
-          image = COALESCE($11, image),
-          remark = COALESCE($12, remark),
-          storage_temp = COALESCE($13, storage_temp),
+      SET barcode = COALESCE($1, barcode),
+          name = COALESCE($2, name),
+          khmer_name = COALESCE($3, khmer_name),
+          category = COALESCE($4, category),
+          unit = COALESCE($5, unit),
+          cost_price = COALESCE($6, cost_price),
+          selling_price = COALESCE($7, selling_price),
+          current_stock = COALESCE($8, current_stock),
+          min_stock = COALESCE($9, min_stock),
+          supplier_name = COALESCE($10, supplier_name),
+          supplier_phone = COALESCE($11, supplier_phone),
+          image = COALESCE($12, image),
+          remark = COALESCE($13, remark),
+          storage_temp = COALESCE($14, storage_temp),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $14
+      WHERE id = $15
       RETURNING *;
     `, [
+      cleanBarcode,
       name ? String(name).trim() : null,
       khmerName !== undefined ? (khmerName ? String(khmerName).trim() : null) : null,
       category ? String(category).trim() : null,
@@ -565,6 +587,11 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
       storageTemp !== undefined ? (storageTemp ? String(storageTemp).trim() : null) : null,
       targetId
     ]);
+
+    // Also update barcode in restock_items if changed
+    if (cleanBarcode) {
+      await pool.query('UPDATE restock_items SET barcode = $1 WHERE product_id = $2;', [cleanBarcode, targetId]);
+    }
 
     res.json(mapProduct(result.rows[0]));
   } catch (err: any) {

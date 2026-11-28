@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Product } from '../types';
 import { CustomSelect, SelectOption } from './ui/CustomSelect';
 import { ConfirmModal } from './ui/ConfirmModal';
-import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { X, Search, Plus, PlusCircle, Package, RefreshCw, ShoppingCart, Check, FileSpreadsheet, Trash2, Pencil } from 'lucide-react';
 
 interface ProductCatalogModalProps {
   isOpen: boolean;
@@ -12,6 +12,7 @@ interface ProductCatalogModalProps {
   onOpenImportExcel?: () => void;
   onAddToOrder: (product: Product) => void;
   onDeleteProduct?: (productId: string) => void;
+  onEditProduct?: (product: Product) => void;
   onResetDemoData: () => void;
 }
 
@@ -23,6 +24,7 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
   onOpenImportExcel,
   onAddToOrder,
   onDeleteProduct,
+  onEditProduct,
   onResetDemoData
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -239,6 +241,19 @@ export const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({
                       {prod.category}
                     </span>
                     <div className="flex items-center gap-1">
+                      {onEditProduct && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditProduct(prod);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                          title="កែប្រែ Barcode / ព័ត៌មានទំនិញ"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {onDeleteProduct && (
                         <button
                           type="button"

@@ -43,6 +43,7 @@ export const App: React.FC = () => {
   // Modals state
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isPrintPOOpen, setIsPrintPOOpen] = useState(false);
   const [isImportExcelOpen, setIsImportExcelOpen] = useState(false);
@@ -696,22 +697,54 @@ export const App: React.FC = () => {
     });
   };
 
-  // Save newly registered product
-  const handleSaveNewProduct = async (newProduct: Product, addToOrderNow: boolean): Promise<boolean> => {
-    let savedProd = newProduct;
+  // Open Edit Product Modal
+  const handleOpenEditProduct = useCallback((prod: Product) => {
+    setEditingProduct(prod);
+    setNotFoundBarcode('');
+    setIsAddProductOpen(true);
+  }, []);
+
+  // Save registered or edited product
+  const handleSaveNewProduct = async (
+    targetProduct: Product,
+    addToOrderNow: boolean,
+    isEdit: boolean = false
+  ): Promise<boolean> => {
+    let savedProd = targetProduct;
+
+    if (isEdit) {
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        try {
+          savedProd = await api.updateProduct(targetProduct.id, targetProduct);
+          setDbStatus(prev => (prev.connected ? prev : { ...prev, connected: true }));
+        } catch (err: any) {
+          showToast(`បរាជ័យក្នុងការកែប្រែក្នុង DB: ${err.message}`, 'error');
+          return false;
+        }
+      }
+      setProducts(prev => prev.map(p => p.id === savedProd.id ? savedProd : p));
+      setRestockItems(prev => prev.map(i => i.product.id === savedProd.id ? { ...i, product: savedProd } : i));
+      showToast(`បានកែប្រែទំនិញ "${savedProd.name}" ជោគជ័យ`, 'success');
+      setEditingProduct(null);
+
+      if (addToOrderNow) {
+        handleScan(savedProd.barcode);
+      }
+      return true;
+    }
 
     if (typeof navigator === 'undefined' || navigator.onLine !== false) {
       try {
-        savedProd = await api.createProduct(newProduct);
+        savedProd = await api.createProduct(targetProduct);
         setDbStatus(prev => (prev.connected ? prev : { ...prev, connected: true }));
       } catch (err: any) {
         showToast(`បរាជ័យក្នុងការរក្សាទុកក្នុង DB: ${err.message}`, 'error');
         return false; // Halt if DB rejected (e.g. duplicate barcode)
       }
     } else {
-      const existsLocally = findProductInCatalog(productsRef.current, newProduct.barcode);
+      const existsLocally = findProductInCatalog(productsRef.current, targetProduct.barcode);
       if (existsLocally) {
-        showToast(`Barcode "${newProduct.barcode}" មានរួចហើយក្នុងប្រព័ន្ធ!`, 'error');
+        showToast(`Barcode "${targetProduct.barcode}" មានរួចហើយក្នុងប្រព័ន្ធ!`, 'error');
         return false;
       }
     }
@@ -1067,6 +1100,7 @@ export const App: React.FC = () => {
             setIsTelegramModalOpen(true);
           }}
           onOpenPrintPO={() => setIsPrintPOOpen(true)}
+          onEditProduct={handleOpenEditProduct}
         />
       </main>
 
@@ -1096,12 +1130,18 @@ export const App: React.FC = () => {
         products={products}
       />
 
-      {/* Add New Product Modal */}
+      {/* Add / Edit / Link Product Modal */}
       <AddProductModal
         isOpen={isAddProductOpen}
-        onClose={() => setIsAddProductOpen(false)}
+        onClose={() => {
+          setIsAddProductOpen(false);
+          setEditingProduct(null);
+          setNotFoundBarcode('');
+        }}
         onSave={handleSaveNewProduct}
         initialBarcode={notFoundBarcode}
+        editingProduct={editingProduct}
+        products={products}
       />
 
       {/* Product Catalog Modal */}
@@ -1111,6 +1151,7 @@ export const App: React.FC = () => {
         products={products}
         onOpenAddNew={() => {
           setIsCatalogOpen(false);
+          setEditingProduct(null);
           setNotFoundBarcode('');
           setIsAddProductOpen(true);
         }}
@@ -1120,6 +1161,10 @@ export const App: React.FC = () => {
         }}
         onAddToOrder={(product) => handleScan(product.barcode)}
         onDeleteProduct={handleDeleteProduct}
+        onEditProduct={(product) => {
+          setIsCatalogOpen(false);
+          handleOpenEditProduct(product);
+        }}
         onResetDemoData={handleResetDemoData}
       />
 
