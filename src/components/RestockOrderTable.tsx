@@ -492,6 +492,19 @@ export const RestockOrderTable: React.FC<RestockOrderTableProps> = ({
               ? 'សូមយកកាំភ្លើង Scan ឬចុច "Camera Scan" ដើម្បីស្កេន Barcode ទំនិញដែលអស់ស្តុកលើធ្នើរ។'
               : 'សូមសាកល្បងផ្លាស់ប្តូរពាក្យស្វែងរក ឬជ្រើសរើសអ្នកផ្គត់ផ្គង់ទាំងអស់។'}
           </p>
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSupplierFilter('all');
+                setFilterZeroOnly(false);
+              }}
+              className="mt-1 px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-semibold border border-blue-200 transition active:scale-95 inline-flex items-center gap-1.5"
+            >
+              <span>បង្ហាញទំនិញទាំងអស់ឡើងវិញ ({items.length} មុខ)</span>
+            </button>
+          )}
         </div>
       ) : (
         <>

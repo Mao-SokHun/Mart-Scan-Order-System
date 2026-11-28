@@ -14,7 +14,7 @@ export const pool = new Pool({
   },
   max: 10,
   idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 10000,
   allowExitOnIdle: true
 });
 
@@ -411,7 +411,8 @@ app.get('/api/products', async (req: Request, res: Response) => {
 
     let result;
     if (search && typeof search === 'string' && search.trim()) {
-      const q = `%${search.trim().toLowerCase()}%`;
+      const sanitized = search.trim().toLowerCase().replace(/[%_\\]/g, '\\$&');
+      const q = `%${sanitized}%`;
       result = await pool.query(`
         SELECT * FROM products 
         WHERE LOWER(barcode) LIKE $1 
@@ -987,23 +988,68 @@ app.delete('/api/restock', async (_req: Request, res: Response) => {
 // ==========================================
 const DEFAULT_TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '9202062895:AAE46SFy11XxMWa9tbmJL-nlmWLuxlp39Yg';
 
-// Helper to chunk long text into Telegram-compliant pieces (<4000 characters)
+// Helper to automatically close any dangling HTML tags in a text chunk
+const closeUnclosedTags = (html: string): string => {
+  const openTags: string[] = [];
+  const tagRegex = /<\/?([a-zA-Z0-9]+)[^>]*>/g;
+  let match;
+  while ((match = tagRegex.exec(html)) !== null) {
+    const fullTag = match[0];
+    const tagName = match[1].toLowerCase();
+    if (['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a'].includes(tagName)) {
+      if (fullTag.startsWith('</')) {
+        const lastIdx = openTags.lastIndexOf(tagName);
+        if (lastIdx !== -1) openTags.splice(lastIdx, 1);
+      } else if (!fullTag.endsWith('/>')) {
+        openTags.push(tagName);
+      }
+    }
+  }
+  let closed = html;
+  while (openTags.length > 0) {
+    const t = openTags.pop();
+    closed += `</${t}>`;
+  }
+  return closed;
+};
+
+// Helper to chunk long text into Telegram-compliant pieces (<4000 characters) preserving paragraph boundaries
 const splitTelegramText = (text: string, maxLen = 3900): string[] => {
   if (text.length <= maxLen) return [text];
   const chunks: string[] = [];
-  const lines = text.split('\n');
+  // Split on paragraph boundaries (double newlines) first to keep items intact
+  const paragraphs = text.split('\n\n');
   let currentChunk = '';
 
-  for (const line of lines) {
-    if ((currentChunk + '\n' + line).length > maxLen) {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = line;
+  for (const para of paragraphs) {
+    const separator = currentChunk ? '\n\n' : '';
+    if ((currentChunk + separator + para).length > maxLen) {
+      if (currentChunk) {
+        chunks.push(closeUnclosedTags(currentChunk.trim()));
+      }
+      // If a single paragraph is unusually huge, split by lines
+      if (para.length > maxLen) {
+        const lines = para.split('\n');
+        currentChunk = '';
+        for (const line of lines) {
+          const lineSep = currentChunk ? '\n' : '';
+          if ((currentChunk + lineSep + line).length > maxLen) {
+            if (currentChunk) chunks.push(closeUnclosedTags(currentChunk.trim()));
+            currentChunk = line;
+          } else {
+            currentChunk = currentChunk ? currentChunk + '\n' + line : line;
+          }
+        }
+      } else {
+        currentChunk = para;
+      }
     } else {
-      currentChunk = currentChunk ? currentChunk + '\n' + line : line;
+      currentChunk = currentChunk ? currentChunk + '\n\n' + para : para;
     }
   }
+
   if (currentChunk.trim()) {
-    chunks.push(currentChunk.trim());
+    chunks.push(closeUnclosedTags(currentChunk.trim()));
   }
   return chunks;
 };

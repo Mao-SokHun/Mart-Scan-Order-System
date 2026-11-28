@@ -87,10 +87,14 @@ export const ImportProductsModal: React.FC<ImportProductsModalProps> = ({
     setSelectedSheets([]);
   };
 
-  // Helper to extract numeric values safely
+  // Helper to extract numeric values safely (handles both dot and localized comma decimals)
   const parseNum = (val: any, fallback = 0): number => {
     if (val === null || val === undefined) return fallback;
-    const str = String(val).replace(/[^0-9.-]/g, '');
+    let s = String(val).trim();
+    if (s.includes(',') && !s.includes('.')) {
+      s = s.replace(',', '.');
+    }
+    const str = s.replace(/[^0-9.-]/g, '');
     const num = parseFloat(str);
     return isNaN(num) ? fallback : Math.max(0, num);
   };

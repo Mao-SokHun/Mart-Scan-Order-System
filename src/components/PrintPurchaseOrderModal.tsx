@@ -15,9 +15,40 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
   items
 }) => {
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
-  const [martName, setMartName] = useState('MART KHMER EXPRESS');
-  const [martPhone, setMartPhone] = useState('012 888 999 / 098 777 666');
-  const [martAddress, setMartAddress] = useState('រាជធានីភ្នំពេញ, កម្ពុជា');
+  const [martName, setMartName] = useState(() => {
+    try {
+      return localStorage.getItem('mart_po_store_name') || 'MART KHMER EXPRESS';
+    } catch {
+      return 'MART KHMER EXPRESS';
+    }
+  });
+  const [martPhone, setMartPhone] = useState(() => {
+    try {
+      return localStorage.getItem('mart_po_store_phone') || '012 888 999 / 098 777 666';
+    } catch {
+      return '012 888 999 / 098 777 666';
+    }
+  });
+  const [martAddress, setMartAddress] = useState(() => {
+    try {
+      return localStorage.getItem('mart_po_store_address') || 'រាជធានីភ្នំពេញ, កម្ពុជា';
+    } catch {
+      return 'រាជធានីភ្នំពេញ, កម្ពុជា';
+    }
+  });
+
+  const handleMartNameChange = (val: string) => {
+    setMartName(val);
+    try { localStorage.setItem('mart_po_store_name', val); } catch {}
+  };
+  const handleMartPhoneChange = (val: string) => {
+    setMartPhone(val);
+    try { localStorage.setItem('mart_po_store_phone', val); } catch {}
+  };
+  const handleMartAddressChange = (val: string) => {
+    setMartAddress(val);
+    try { localStorage.setItem('mart_po_store_address', val); } catch {}
+  };
   const [poNumber] = useState(() => `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`);
 
   const orderableItems = useMemo(() => items.filter(i => i.orderQuantity > 0), [items]);
@@ -121,7 +152,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
               <input
                 type="text"
                 value={martName}
-                onChange={(e) => setMartName(e.target.value)}
+                onChange={(e) => handleMartNameChange(e.target.value)}
                 className="text-2xl font-bold tracking-tight text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent w-full"
                 title="ចុចដើម្បីកែឈ្មោះហាង"
               />
@@ -130,7 +161,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
                 <input
                   type="text"
                   value={martAddress}
-                  onChange={(e) => setMartAddress(e.target.value)}
+                  onChange={(e) => handleMartAddressChange(e.target.value)}
                   className="border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent text-slate-600 flex-1"
                   title="ចុចដើម្បីកែអាសយដ្ឋាន"
                 />
@@ -140,7 +171,7 @@ export const PrintPurchaseOrderModal: React.FC<PrintPurchaseOrderModalProps> = (
                 <input
                   type="text"
                   value={martPhone}
-                  onChange={(e) => setMartPhone(e.target.value)}
+                  onChange={(e) => handleMartPhoneChange(e.target.value)}
                   className="border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent text-slate-600 flex-1"
                   title="ចុចដើម្បីកែលេខទូរស័ព្ទ"
                 />

@@ -351,10 +351,13 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         const config = {
           fps: 18,
           disableFlip: false,
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => ({
-            width: Math.max(60, Math.floor(viewfinderWidth * 0.88)),
-            height: Math.max(60, Math.floor(viewfinderHeight * 0.46)),
-          }),
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minDim = Math.min(viewfinderWidth, viewfinderHeight);
+            if (minDim <= 0) return { width: 220, height: 110 };
+            const w = Math.min(viewfinderWidth - 12, Math.max(50, Math.floor(viewfinderWidth * 0.88)));
+            const h = Math.min(viewfinderHeight - 12, Math.max(50, Math.floor(viewfinderHeight * 0.46)));
+            return { width: Math.max(40, w), height: Math.max(40, h) };
+          },
         };
 
         const initialCameraConfig = cameraIdToUse || { facingMode: 'environment' };
